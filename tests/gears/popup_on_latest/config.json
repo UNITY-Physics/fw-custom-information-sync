@@ -1,0 +1,44 @@
+{
+    "destination": {
+        "id": "65f3841b2c1f02067c450e43",
+        "type": "analysis"
+    },
+    "inputs": {
+        "sessions": {
+            "hierarchy": {
+                "id": "65d629355c125039cf48b228",
+                "type": "project"
+            },
+            "location": {
+                "path": "/flywheel/v0/input/sessions/sessions.csv",
+                "name": "sessions.csv"
+            },
+            "base": "file"
+        },
+        "subjects": {
+            "hierarchy": {
+                "id": "65d629355c125039cf48b228",
+                "type": "project"
+            },
+            "location": {
+                "path": "/flywheel/v0/input/subjects/subjects.csv",
+                "name": "subjects.csv"
+            },
+            "base": "file"
+        },
+        "acquisitions": { "hierarchy": {
+                "id": "65d629355c125039cf48b228",
+                "type": "project"
+            },
+            "location": {
+                "path": "/flywheel/v0/input/acquisitions/acquisitions.csv",
+                "name": "acquisitions.csv"
+            },
+            "base": "file"
+        }
+    },
+    "config": {
+        "debug": true,
+        "dry_run": false
+    }
+}

@@ -1,0 +1,10 @@
+.idea/
+.containerId
+user.json
+__pycache__
+*.egg-info
+*.swp
+.coverage
+coverage.xml
+junit.xml
+job.log

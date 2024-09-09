@@ -1,0 +1,210 @@
+"""Metadata for testing files."""
+
+files_object = [
+    {
+        "classification": {"Intent": ["Localizer"], "Measurement": ["T2"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.202001221315115588942600.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {"Intent": ["Localizer"], "Measurement": ["T2", "T2*"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213151532586843643.0.0.0_i00003.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {"Intent": ["Localizer"], "Measurement": ["T2", "T2*"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213151532636743649.0.0.0_i00003.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {"Intent": ["Localizer"], "Measurement": ["T2", "T2*"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213151532665343653.0.0.0_i00003.nii.gz",
+        "type": "nifti",
+    },
+    {"classification": "", "modality": "", "name": "", "type": ""},
+    {
+        "classification": {"Intent": ["Structural"], "Measurement": ["T2"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213181526970244537.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {
+            "Features": ["MPRAGE"],
+            "Intent": ["Structural"],
+            "Measurement": ["T1"],
+        },
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213190686331545228.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {
+            "Custom": [],
+            "Features": ["Derived"],
+            "Intent": ["Functional"],
+        },
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213405489783645948.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {
+            "Features": ["Derived"],
+            "Intent": ["Functional"],
+            "Measurement": ["T2*"],
+        },
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213405489785745950.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {"Features": ["Derived"], "Intent": ["Functional"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213405489786245953.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {"Intent": ["Functional"], "Measurement": ["T2*"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213405493319245954.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {"Features": ["Derived"], "Intent": ["Functional"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213412276275246832.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {
+            "Features": ["Derived"],
+            "Intent": ["Functional"],
+            "Measurement": ["T2*"],
+        },
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213412276275946833.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {"Features": ["Derived"], "Intent": ["Functional"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213550395338084308.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {
+            "Features": ["Derived"],
+            "Intent": ["Functional"],
+            "Measurement": ["T2*"],
+        },
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213550395340184310.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {"Features": ["Derived"], "Intent": ["Functional"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213550395340684313.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {"classification": "", "modality": "", "name": "", "type": ""},
+    {
+        "classification": {"Features": ["Derived"], "Intent": ["Functional"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213552776291985192.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {
+            "Features": ["Derived"],
+            "Intent": ["Functional"],
+            "Measurement": ["T2*"],
+        },
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012213552776292585193.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {"Features": ["Derived"], "Intent": ["Functional"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012214071722230324844.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {
+            "Features": ["Derived"],
+            "Intent": ["Functional"],
+            "Measurement": ["T2*"],
+        },
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012214071722231424846.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {"Features": ["Derived"], "Intent": ["Functional"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012214071722231924849.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {"classification": "", "modality": "", "name": "", "type": ""},
+    {
+        "classification": {"Features": ["Derived"], "Intent": ["Functional"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012214074068101925728.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {
+            "Features": ["Derived"],
+            "Intent": ["Functional"],
+            "Measurement": ["T2*"],
+        },
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012214074068102625729.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {"Features": ["Derived"], "Intent": ["Functional"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012214213150834465380.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {
+            "Features": ["Derived"],
+            "Intent": ["Functional"],
+            "Measurement": ["T2*"],
+        },
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012214213150835565382.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {"Features": ["Derived"], "Intent": ["Functional"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.2020012214213150836065385.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {"classification": "", "modality": "", "name": "", "type": ""},
+    {
+        "classification": {"Features": ["Derived"], "Intent": ["Functional"]},
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.20200122142155166066264.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+    {
+        "classification": {
+            "Features": ["Derived"],
+            "Intent": ["Functional"],
+            "Measurement": ["T2*"],
+        },
+        "modality": "MR",
+        "name": "1.3.12.2.1107.5.2.43.67025.20200122142155166666265.0.0.0.nii.gz",
+        "type": "nifti",
+    },
+]
