@@ -17,7 +17,7 @@ def write_csv(filename, all_fieldnames, rows):
         writer.writerows(rows)
 
 
-def run_first_stage_no_inputs(context, destination):
+def run_first_stage_no_inputs(context, destination, project):
     """Run the first stage of the gear with no inputs.
 
     Args:
@@ -40,18 +40,19 @@ def run_first_stage_no_inputs(context, destination):
     # Get the current timestamp
     current_timestamp = datetime.now()
     # Format the timestamp as a string
-    formatted_timestamp = current_timestamp.strftime('%Y-%m-%d %H:%M:%S')
+    formatted_timestamp = current_timestamp.strftime('%Y-%m-%d_%H-%M-%S')
 
     # File name for the CSV
-    filename = (f"/flywheel/v0/work/{destination.label}_{formatted_timestamp}.csv")
+    filename = (f"/flywheel/v0/output/{project.label}_{formatted_timestamp}.csv")
     print(f"Saving data to {filename}")
 
     # container labels
-    project = destination.parents["project"]
+    print(f"Destination container: {destination.label}")
     group = project.parents["group"]
+    print(f"Group: {group}")
 
     # Loop over all sessions in the project
-    for session in destination.sessions.iter():
+    for session in project.sessions.iter():
                         print(f"\t\t{session.subject.label}")
                         subject = session.subject
                         print(f"\t\t{session.label}")
@@ -61,7 +62,7 @@ def run_first_stage_no_inputs(context, destination):
                         ses_dict = session.info
 
                         # Add additional info to the dictionary
-                        ses_dict['group_id'] = group.label
+                        ses_dict['group_id'] = group
                         ses_dict['project_id'] = project.label
                         ses_dict['subject_id'] = subject.label
                         ses_dict['session_id'] = session.label

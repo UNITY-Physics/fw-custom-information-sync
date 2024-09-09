@@ -37,7 +37,7 @@ def run(context, inputs_provided, ses_df, dry_run):
     log.info(f"Running on {msg}")
 
     if not inputs_provided:
-        e_code = run_first_stage_no_inputs(context, destination)
+        e_code = run_first_stage_no_inputs(context, destination, project)
 
     else:
         e_code = run_second_stage_with_inputs(context.client, run_level, hierarchy, ses_df, dry_run)
