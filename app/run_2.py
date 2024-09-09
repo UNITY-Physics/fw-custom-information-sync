@@ -1,16 +1,12 @@
 """Second run of gear with inputs and doing renaming"""
 
 import logging
-import re
-import flywheel as fw
-import numpy as np
-import pandas as pd
+import flywheel
 import csv
 
 log = logging.getLogger(__name__)
 
-
-def run_second_stage_with_inputs(client, run_level, hierarchy, df, dry_run):
+def run_second_stage_with_inputs(api_key, run_level, df):
     """Since input csv files were provided, update labels where new ones were given.
 
     Args:
@@ -23,8 +19,13 @@ def run_second_stage_with_inputs(client, run_level, hierarchy, df, dry_run):
         int: 0 if all is well, 1 if there is an error
     """
    
+    fw = flywheel.Client(api_key=api_key)
+
     print(f"Reading CSV at {run_level} level")
     # Read the CSV file with the updated data
+
+    print(f"Reading CSV file {df}")
+
     with open(df, mode='r', newline='') as file:
         reader = csv.DictReader(file)
         csv_data = [row for row in reader]

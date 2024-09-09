@@ -8,7 +8,7 @@ from app.run_2 import run_second_stage_with_inputs
 log = logging.getLogger(__name__)
 
 
-def run(context, inputs_provided, ses_df, dry_run):
+def run(context, inputs_provided, df, api_key):
     """Gather necesary information and run either the first stage (no inputs) or the second stage (with inputs).
 
     Returns:
@@ -40,6 +40,6 @@ def run(context, inputs_provided, ses_df, dry_run):
         e_code = run_first_stage_no_inputs(context, destination, project)
 
     else:
-        e_code = run_second_stage_with_inputs(context.client, run_level, hierarchy, ses_df, dry_run)
+        e_code = run_second_stage_with_inputs(api_key, run_level, df)
 
     return e_code

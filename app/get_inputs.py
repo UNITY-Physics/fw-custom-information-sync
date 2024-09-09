@@ -21,15 +21,15 @@ def load_inputs(
          inputs_provided [bool]: true if any input csv file is provided
          ses_df  [dataframe]: session spreadsheet
     """
-    ses = gear_context.get_input_path("session_info")
+    api_key = gear_context.get_input("api-key").get("key")
 
-    if ses:
-        ses_df = pd.read_csv(ses)
-        log.info(f"Loaded {ses}")
+    df = gear_context.get_input_path("session_info")
+
+    if df:
+        log.info(f"Loaded {df}")
         inputs_provided = True
     else:
-        ses_df = None
         log.info("Session spreadsheet not provided")
         inputs_provided = False
 
-    return inputs_provided, ses_df
+    return api_key, inputs_provided, df

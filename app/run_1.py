@@ -43,7 +43,7 @@ def run_first_stage_no_inputs(context, destination, project):
     formatted_timestamp = current_timestamp.strftime('%Y-%m-%d_%H-%M-%S')
 
     # File name for the CSV
-    filename = (f"/flywheel/v0/output/{project.label}_{formatted_timestamp}.csv")
+    filename = (f"/flywheel/v0/output/{project.label}_session-information.csv")
     print(f"Saving data to {filename}")
 
     # container labels

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash 
 
 GEAR=fw-custom-information-sync
-IMAGE=flywheel/custom-information-sync:0.0.2
-LOG=custom-information-sync-0.0.2-66df0c6847cbe4c7164f161d
+IMAGE=flywheel/custom-information-sync:0.0.3
+LOG=custom-information-sync-0.0.3-66df160147cbe4c7164f1623
 
 # Command:
 docker run -it --rm --entrypoint bash\
