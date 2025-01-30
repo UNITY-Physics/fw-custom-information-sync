@@ -2,13 +2,20 @@
 
 ## Overview
 
-*[Usage](#usage)*
+*[Usage](#usage)*  
+Run this gear twice to add or modify custom information in session containers. The first run will generate a CSV file with unique subject and session labels and existing custom information. This file can be downloaded and edited to add new custom information. The second run will use the edited CSV file to update the session containers with the new custom information.
 
-*[FAQ](#faq)*
+*[FAQ](#faq)*  
+**Q:** Can this gear be used to merge scans from the same subject with multiple sessions or rename subjects?  
+**A:** No, this gear is not capable of merging subjects or sessions. Edits to subject or session labels should be done manually in Flywheel.  
+
+**Q:** Why do I need to download the CSV file to edit it?  
+**A:** To ensure data is matched to the correct subject and session, the CSV file is generated with the subject and session labels exactly as they appear in Flywheel. Demographic information is often collected in a separate spreadsheet and the labels don't always match exactly.
 
 ### Summary
 
-This gear offers a simple way to modify custom information in session containers. Running custom-information-sync should be done at the project level. This will generate a CSV file that will be populated with a unique list of subject, session labels and existing custom information.  This CSV file needs to be downloaded and modified to provide new custom information. Edited CSV files are then uploaded to the project as an attachment and provided as input to another run of this same gear to modify custom information. 
+This gear offers a simple way to modify custom information in session containers. Running custom-information-sync should be done at the project level. This will generate a CSV file that will be populated with a unique list of subject, session labels and existing custom information that exists in the Flywheel project. This CSV file can be downloaded or opened in Jupyter Labs and modified to provide new custom information (age_months, weight, height etc.). Edited CSV files are then uploaded to the project as an attachment and provided as input to another run of this same gear to modify custom information. 
+
 *This gear is not capable of merging subjects or sessions (changing multiple subject or session labels to the same label). Edits to subject or session labels should be done manually in Flywheel.*
 
 
@@ -23,7 +30,7 @@ This gear offers a simple way to modify custom information in session containers
 *Gear Level:*
 
 - [X] Project
-- [X] Subject
+- [ ] Subject
 - [ ] Session
 - [ ] Acquisition
 - [ ] Analysis

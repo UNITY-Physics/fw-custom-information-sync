@@ -1,0 +1,12 @@
+include:
+  - project: flywheel-io/tools/etc/qa-ci
+    ref: 4bed6eb531545191e2ac1cec462091b4dd732a4c
+    file: ci/gear.yml
+
+variables:
+  PYVER: "3.11"
+  PYTEST_COV_FAIL_UNDER: 0  # Set pytest coverage to 0
+  DEBUG: "1"  # Set debug mode to print out executed command on qa-ci
+  PUBLISH_POETRY: "false"  # Set to true to allow CI to publish package to PYPI
+  CACHE_CLEAR: "1"  # Set to true to clear runner cache on gitlab CI
+  DOCKER_IMAGE: "flywheel/relabel-container"

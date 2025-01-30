@@ -1,9 +1,8 @@
 #!/usr/bin/env bash 
 
 GEAR=fw-custom-information-sync
-IMAGE=flywheel/custom-information-sync:0.0.3
-LOG=custom-information-sync-0.0.3-66df160147cbe4c7164f1623
-
+IMAGE=flywheel/custom-information-sync:0.0.4
+LOG=custom-information-sync-0.0.4-66df1d62e8fa086b784aaee8
 # Command:
 docker run -it --rm --entrypoint bash\
 	-v /Users/nbourke/GD/atom/unity/fw-gears/${GEAR}/app/:/flywheel/v0/app\

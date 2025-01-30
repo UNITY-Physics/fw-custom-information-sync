@@ -13,6 +13,9 @@ RUN apt-get update &&  \
 COPY requirements.txt $FLYWHEEL/
 RUN pip install --no-cache-dir -r $FLYWHEEL/requirements.txt
 
+RUN pip install flywheel-gear-toolkit && \
+    pip install flywheel-sdk
+    
 # Installing the current project (most likely to change, above layer can be cached)
 COPY ./ $FLYWHEEL/
 # RUN pip install --no-cache-dir .

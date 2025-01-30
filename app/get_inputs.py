@@ -1,7 +1,6 @@
 """Parser module to parse gear config.json."""
 
 import logging
-import pandas as pd
 
 from flywheel_gear_toolkit import GearToolkitContext
 from pandas import DataFrame
