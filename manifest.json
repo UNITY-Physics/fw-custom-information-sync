@@ -1,0 +1,49 @@
+{
+  "author": "Niall Bourke",
+  "cite": "",
+  "command": "python run.py",
+  "config": {
+    "dry_run": {
+      "default": false,
+      "description": "Whether or not to perform a dry run, logging what would be changed without actually changing it. Default = False",
+      "type": "boolean"
+    }
+  },
+  "custom": {
+    "flywheel": {
+      "show-job": true,
+      "suite": "UNITY Apps"
+    },
+    "gear-builder": {
+      "category": "analysis",
+      "image": "flywheel/custom-information-sync:0.0.6"
+    }
+  },
+  "description": "This gear offers a way to modify custom information in session containers synced to a csv. Running custom-information-sync as a project-level analysis will generate a CSV file that will be populated with a unique list of subject, session labels along with existing custom information. This CSV file needs to be downloaded and modified to provide new custom information for any missing sessions. Edited CSV files are then uploaded to the project as an attachment and provided as input to a run of this same gear to modify session custom info. For more information, please see the README in the source repository.",
+  "environment": {
+    "FLYWHEEL": "/flywheel/v0",
+    "LANG": "C.UTF-8",
+    "LANGUAGE": "en_US",
+    "PWD": "/flywheel/v0",
+    "PYTHON_VERSION": "3.11.6",
+    "SETUPTOOLS_USE_DISTUTILS": "stdlib"
+  },
+  "inputs": {
+    "session_info": {
+      "base": "file",
+      "description": "CSV file containing new custom info for sessions",
+      "optional": true
+    },
+    "api-key": {
+      "base": "api-key",
+      "read-only": true
+    }
+  },
+  "label": "Custom Information Sync",
+  "license": "MIT",
+  "maintainer": "Niall Bourke <niall.bourke@kcl.ac.uk>",
+  "name": "custom-information-sync",
+  "source": "",
+  "url": "",
+  "version": "0.0.6"
+}
