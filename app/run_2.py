@@ -12,40 +12,7 @@ log = logging.getLogger(__name__)
 import pandas as pd
 import ast
 
-metadata_template = {
-    "age_at_scan_months": 0,
-    "gestational_age_weeks": 0,
-    "sex_at_birth": None,
-    "birth_weight_kg": 0,
-    "birth_length_cm": 0,
-    "birth_hc_cm": 0,
-
-    "family_size_at_scan": 0,
-    "num_children_in_family": 0,
-    "num_children_in_household": 0,
-    "num_adults_in_household": 0,
-
-    "birth_order": 0,
-    "current_height_cm": 0,
-    "current_weight_kg": 0,
-    "current_hc_cm": 0,
-    "country_of_birth": None,
-    "city_of_birth": None,
-    "child_ethnicity": None,
-    "child_race": None,
-    "child_religion": None,
-    "child_caste": None,
-
-    "maternal_age_at_birth": 0,
-    "maternal_education_years": 0,
-
-    "father_owns_cellphone": False,
-    "mother_owns_cellphone": False,
-    "child_health_group": [],
-    "gsed_composite_score": 0,
-    "gsed_psychosocial_score": 0,
-    "gsed_daz": 0
-}
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 import ast
@@ -160,42 +127,46 @@ def run_second_stage_with_inputs(api_key, run_level, df):
         reader = csv.DictReader(file)
         csv_data = [row for row in reader]
 
+    csv_data = pd.DataFrame(csv_data)
+    csv_data = cast_metadata_fields(csv_data, metadata_template)
 
-    df = cast_metadata_fields(df, metadata_template)
+    def process_row(row):
+        try:
+            group_id = row['group_id']
+            project_id = row['project_id']
+            subject_id = row['subject_id']
+            session_id = row['session_id']
 
-    # Loop over each row in the CSV to update Flywheel session info
-    for row in csv_data:
-        group_id = row['group_id']
-        project_id = row['project_id']
-        subject_id = row['subject_id']
-        session_id = row['session_id']
+            group = fw.lookup(group_id)
+            project = group.projects.find_first(f'label={project_id}')
+            subject = project.subjects.find_first(f'label={subject_id}')
+            session = subject.sessions.find_first(f'label={session_id}')
 
-        # Locate the session in Flywheel using group_id, project_id, subject_id, session_id
-        group = fw.lookup(group_id)
-        project = group.projects.find_first(f'label={project_id}')
-        subject = project.subjects.find_first(f'label={subject_id}')
-        session = subject.sessions.find_first(f'label={session_id}')
+            if session:
+                session = session.reload()
+                ses_dict = session.info
 
-        if session:
-            # Reload session to get the latest info
-            session = session.reload()
+                for key, value in row.items():
+                    if key not in ['group_id', 'project_id', 'subject_id', 'session_id']:
+                        if value is not None and not (isinstance(value, float) and pd.isna(value)) and str(value).strip() != '':
+                            ses_dict[key] = value
 
-            # Update ses_dict with the values from the CSV row
-            ses_dict = session.info
+                session.update_info(ses_dict)
+                return f"Updated session {session_id} for subject {subject_id} in project {project_id}"
+            else:
+                return f"Session {session_id} not found for subject {subject_id} in project {project_id}"
+        
+        except Exception as e:
+            return f"Error processing row for session {row.get('session_id')}: {e}"
 
-            # Loop through the row's keys and update ses_dict
-            for key, value in row.items():
-                if key not in ['group_id', 'project_id', 'subject_id', 'session_id']:
-                    # Update or add the value in ses_dict, if the value is not empty
-                    if value:
-                        ses_dict[key] = value
+    # Use ThreadPoolExecutor to parallelize
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(process_row, row) for _, row in csv_data.iterrows()]
+        
+        for future in as_completed(futures):
+            print(future.result())
 
-            # Update session info in Flywheel with the modified ses_dict
-            session.update_info(ses_dict)
-            print(f"Updated session {session_id} for subject {subject_id} in project {project_id}")
-        else:
-            print(f"Session {session_id} not found for subject {subject_id} in project {project_id}")
-
+    
     print("All sessions updated from CSV.")
 
     return 0  # all is well

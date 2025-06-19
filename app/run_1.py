@@ -62,7 +62,7 @@ def run_first_stage_no_inputs(context, destination, project):
     print(f"Group: {group}")
 
     # Loop over all sessions in the project
-    for session in project.sessions.iter():
+    for session in project.sessions():
         print(f"\t\t{session.subject.label}")
         subject = session.subject
         print(f"\t\t{session.label}")
