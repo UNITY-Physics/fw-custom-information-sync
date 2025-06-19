@@ -6,6 +6,7 @@ import flywheel
 import pandas as pd
 import csv
 from datetime import datetime
+import yaml 
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +34,15 @@ def run_first_stage_no_inputs(context, destination, project):
     # Prepare a variable to store all fieldnames (headers) that we encounter
     all_fieldnames = ['group_id', 'project_id', 'subject_id', 'session_id']
 
+    #Add the custom information keys to the fieldnames
+    with open(f"/flywheel/v0/utils/metadata_fields.yaml", 'r') as file:
+        metadata = yaml.safe_load(file)
+
+    CDE = metadata["metadata_template"]
+
+    for field in CDE:
+        all_fieldnames.append(field)
+
     # Store all rows to write later
     all_rows = []
 
@@ -53,27 +63,39 @@ def run_first_stage_no_inputs(context, destination, project):
 
     # Loop over all sessions in the project
     for session in project.sessions.iter():
-                        print(f"\t\t{session.subject.label}")
-                        subject = session.subject
-                        print(f"\t\t{session.label}")
-                        session = session.reload()
+        print(f"\t\t{session.subject.label}")
+        subject = session.subject
+        print(f"\t\t{session.label}")
+        session = session.reload()
 
-                        # Dictionary from session.info
-                        ses_dict = session.info
+        # Dictionary from session.info
+        ses_dict = session.info
+        #prepopulate if CDE fields are not present
+        # Add missing metadata fields without overwriting existing values
+        for key, default_value in CDE.items():
 
-                        # Add additional info to the dictionary
-                        ses_dict['group_id'] = group
-                        ses_dict['project_id'] = project.label
-                        ses_dict['subject_id'] = subject.label
-                        ses_dict['session_id'] = session.label
+            if key in ses_dict:
+                # If the key exists, skip it
+                continue
+            else:
+                ses_dict[key] = default_value
+                
+        session.update_info(ses_dict)
 
-                        # Check for new keys in the ses_dict and update headers
-                        new_keys = [key for key in ses_dict.keys() if key not in all_fieldnames]
-                        if new_keys:
-                            all_fieldnames.extend(new_keys)  # Add any new keys to the fieldnames
 
-                        # Add the row to our collection of rows
-                        all_rows.append({key: ses_dict.get(key, '') for key in all_fieldnames})
+        # Add additional info to the dictionary
+        ses_dict['group_id'] = group
+        ses_dict['project_id'] = project.label
+        ses_dict['subject_id'] = subject.label
+        ses_dict['session_id'] = session.label
+
+        # Check for new keys in the ses_dict and update headers
+        new_keys = [key for key in ses_dict.keys() if key not in all_fieldnames]
+        if new_keys:
+            all_fieldnames.extend(new_keys)  # Add any new keys to the fieldnames
+
+         # Add the row to our collection of rows
+        all_rows.append({key: ses_dict.get(key, CDE.get(key, '')) for key in all_fieldnames})
 
     # After processing all sessions, write the CSV with updated headers
     write_csv(filename, all_fieldnames, all_rows)

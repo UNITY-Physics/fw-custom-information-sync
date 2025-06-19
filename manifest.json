@@ -16,7 +16,7 @@
     },
     "gear-builder": {
       "category": "analysis",
-      "image": "flywheel/custom-information-sync:0.0.6"
+      "image": "flywheel/custom-information-sync:0.0.9"
     }
   },
   "description": "This gear offers a way to modify custom information in session containers synced to a csv. Running custom-information-sync as a project-level analysis will generate a CSV file that will be populated with a unique list of subject, session labels along with existing custom information. This CSV file needs to be downloaded and modified to provide new custom information for any missing sessions. Edited CSV files are then uploaded to the project as an attachment and provided as input to a run of this same gear to modify session custom info. For more information, please see the README in the source repository.",
@@ -45,5 +45,5 @@
   "name": "custom-information-sync",
   "source": "",
   "url": "",
-  "version": "0.0.6"
+  "version": "0.0.9"
 }
