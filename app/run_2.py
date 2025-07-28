@@ -5,6 +5,7 @@ import flywheel
 import csv
 import ast
 import yaml
+import sys
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ def cast_metadata_fields(df, template):
             if isinstance(example, bool):
                 target_type = bool
             elif isinstance(example, int):
-                target_type = int
+                target_type = float
             elif isinstance(example, float):
                 target_type = float
             elif isinstance(example, list):
@@ -92,9 +93,11 @@ def cast_metadata_fields(df, template):
             else:
                 continue
             df[col] = df[col].apply(lambda x: parse_value(x, target_type))
+            # print(col, target_type)
         else:
             # Unknown column: use smart fallback
             df[col] = df[col].apply(smart_fallback_parser)
+    
     return df
 
 
@@ -113,25 +116,41 @@ def run_second_stage_with_inputs(api_key, run_level, df):
    
     fw = flywheel.Client(api_key=api_key)
 
-    with open(f"/flywheel/v0/utils/metadata_fields.yaml", 'r') as file:
+    with open(f"/flywheel/v0/utils/cde_template.yaml", 'r') as file:
         metadata = yaml.safe_load(file)
 
-    metadata_template = metadata["metadata_template"]
+    demographics_cde = metadata['Demographics']
+    ses_cde = metadata['SES']
+    cognitive_cde = metadata['Cognitive']
+
+    metadata_template = demographics_cde | ses_cde | cognitive_cde 
+
+    # metadata_template = metadata["metadata_template"]
 
     print(f"Reading CSV at {run_level} level")
     # Read the CSV file with the updated data
 
     print(f"Reading CSV file {df}")
 
-    with open(df, mode='r', newline='') as file:
-        reader = csv.DictReader(file)
-        csv_data = [row for row in reader]
+    # with open(df, mode='r', newline='') as file:
+    #     reader = csv.DictReader(file)
+    #     csv_data = [row for row in reader]
 
-    csv_data = pd.DataFrame(csv_data)
+    csv_data = pd.read_csv(df, encoding='utf-8-sig')
+    #Ensure group_id, project_id, subject_id, and session_id columns are there, otherwise exit
+    
+    required_columns = {'group_id', 'project_id', 'subject_id', 'session_id','childTimepointAge_months'}
+
+    # Check for missing columns
+    missing = required_columns - set(df.columns)
+    if missing:
+        print(f"Missing required column(s): {', '.join(missing)}. Exiting.")
+        sys.exit(1)
+
     csv_data = cast_metadata_fields(csv_data, metadata_template)
-
+   
     def process_row(row):
-        try:
+        try:               
             group_id = row['group_id']
             project_id = row['project_id']
             subject_id = row['subject_id']
@@ -139,8 +158,10 @@ def run_second_stage_with_inputs(api_key, run_level, df):
 
             group = fw.lookup(group_id)
             project = group.projects.find_first(f'label={project_id}')
-            subject = project.subjects.find_first(f'label={subject_id}')
-            session = subject.sessions.find_first(f'label={session_id}')
+            project = project.reload()
+            subject = project.subjects.find_first(f"label='{subject_id}'")
+            subject = subject.reload()
+            session = subject.sessions.find_first(f"label='{session_id}'")
 
             if session:
                 session = session.reload()
@@ -150,7 +171,7 @@ def run_second_stage_with_inputs(api_key, run_level, df):
                     if key not in ['group_id', 'project_id', 'subject_id', 'session_id']:
                         if value is not None and not (isinstance(value, float) and pd.isna(value)) and str(value).strip() != '':
                             ses_dict[key] = value
-
+                
                 session.update_info(ses_dict)
                 return f"Updated session {session_id} for subject {subject_id} in project {project_id}"
             else:

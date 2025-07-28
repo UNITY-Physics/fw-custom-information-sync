@@ -34,11 +34,20 @@ def run_first_stage_no_inputs(context, destination, project):
     # Prepare a variable to store all fieldnames (headers) that we encounter
     all_fieldnames = ['group_id', 'project_id', 'subject_id', 'session_id']
 
-    #Add the custom information keys to the fieldnames
-    with open(f"/flywheel/v0/utils/metadata_fields.yaml", 'r') as file:
+    # #Add the custom information keys to the fieldnames
+    # with open(f"/flywheel/v0/utils/metadata_fields.yaml", 'r') as file:
+    #     metadata = yaml.safe_load(file)
+
+    # CDE = metadata["metadata_template"]
+
+    with open(f"/flywheel/v0/utils/cde_template.yaml", 'r') as file:
         metadata = yaml.safe_load(file)
 
-    CDE = metadata["metadata_template"]
+    demographics_cde = metadata['Demographics']
+    ses_cde = metadata['SES']
+    cognitive_cde = metadata['Cognitive']
+
+    CDE = demographics_cde | ses_cde | cognitive_cde 
 
     for field in CDE:
         all_fieldnames.append(field)
@@ -78,7 +87,7 @@ def run_first_stage_no_inputs(context, destination, project):
                 # If the key exists, skip it
                 continue
             else:
-                ses_dict[key] = default_value
+                ses_dict[key] = None
                 
         session.update_info(ses_dict)
 

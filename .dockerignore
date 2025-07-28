@@ -9,6 +9,7 @@
 !README.md
 !requirements.txt
 !./utils/metadata_fields.yaml
+!./utils/cde_template.yml
 
 # Re-ignore pycache which might be inside package dir
 **/__pycache__

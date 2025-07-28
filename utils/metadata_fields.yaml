@@ -1,5 +1,5 @@
 metadata_template : {
-    "age_at_scan_months": 0,  # Age in months
+    "age_at_scan_months": 0.1,  # Age in months
     "gestational_age_weeks": 0,  # Gestational age in weeks
     "sex_at_birth": None,  # "Male" / "Female" / "Other"
     "birth_weight_kg": 0,  # Birth weight in kilograms
@@ -28,7 +28,6 @@ metadata_template : {
     "father_owns_cellphone": False,  # Boolean (True/False)
     "mother_owns_cellphone": False,  # Boolean (True/False)
     "child_health_group": [],  # List of categories (e.g., ["Healthy", "Anemia"])
-    "gsed_composite_score": 0,  # Numeric score
     "gsed_psychosocial_score": 0,  # Numeric score
     "gsed_daz": 0  # Numeric score
 }
