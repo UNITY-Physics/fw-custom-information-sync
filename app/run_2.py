@@ -137,7 +137,7 @@ def run_second_stage_with_inputs(api_key, run_level, df):
     #     reader = csv.DictReader(file)
     #     csv_data = [row for row in reader]
 
-    csv_data = pd.read_csv(df, encoding='utf-8-sig')
+    csv_data = pd.read_csv(df, encoding='utf-8', encoding_errors='replace')
     #Ensure group_id, project_id, subject_id, and session_id columns are there, otherwise exit
     
     required_columns = {'group_id', 'project_id', 'subject_id', 'session_id','childTimepointAge_months'}
