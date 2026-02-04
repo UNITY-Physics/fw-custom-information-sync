@@ -6,6 +6,7 @@ import csv
 import ast
 import yaml
 import sys
+from utils.clean_session_info import clean_session
 
 log = logging.getLogger(__name__)
 
@@ -142,14 +143,23 @@ def run_second_stage_with_inputs(api_key, run_level, df):
     required_columns = {'group_id', 'project_id', 'subject_id', 'session_id','childTimepointAge_months'}
 
     # Check for missing columns
-    missing = required_columns - set(df.columns)
+    missing = required_columns - set(csv_data.columns)
     if missing:
         print(f"Missing required column(s): {', '.join(missing)}. Exiting.")
         sys.exit(1)
 
+    
+    #Rename columns in case the csv uploaded is using the old template
+    with open(f"/flywheel/v0/utils/old_new_harmonization.yaml", 'r') as file:
+        metadata = yaml.safe_load(file)
+
+    old_key_new_key = metadata['old_key_new_key']
+    csv_data.rename(columns=old_key_new_key, inplace=True, errors='ignore')
+
+
     csv_data = cast_metadata_fields(csv_data, metadata_template)
    
-    def process_row(row):
+    def process_row(row,replace):
         try:               
             group_id = row['group_id']
             project_id = row['project_id']
@@ -167,13 +177,23 @@ def run_second_stage_with_inputs(api_key, run_level, df):
                 session = session.reload()
                 ses_dict = session.info
 
+                ses_dict = clean_session(ses_dict)
+                session.replace_info(ses_dict)
+                session = session.reload()
+
+                ses_dict = session.info
+
                 for key, value in row.items():
                     if key not in ['group_id', 'project_id', 'subject_id', 'session_id']:
                         if value is not None and not (isinstance(value, float) and pd.isna(value)) and str(value).strip() != '':
                             ses_dict[key] = value
-                
-                session.update_info(ses_dict)
-                return f"Updated session {session_id} for subject {subject_id} in project {project_id}"
+                if replace==True:
+                    session.replace_info(ses_dict)
+                    return f"Replaced session {session_id} for subject {subject_id} in project {project_id}"
+
+                else:
+                    session.update_info(ses_dict)
+                    return f"Updated session {session_id} for subject {subject_id} in project {project_id}"
             else:
                 return f"Session {session_id} not found for subject {subject_id} in project {project_id}"
         
@@ -181,8 +201,9 @@ def run_second_stage_with_inputs(api_key, run_level, df):
             return f"Error processing row for session {row.get('session_id')}: {e}"
 
     # Use ThreadPoolExecutor to parallelize
+    replace=True
     with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = [executor.submit(process_row, row) for _, row in csv_data.iterrows()]
+        futures = [executor.submit(process_row, row,replace) for _, row in csv_data.iterrows()]
         
         for future in as_completed(futures):
             print(future.result())

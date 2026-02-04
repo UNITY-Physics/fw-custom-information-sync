@@ -7,6 +7,7 @@ import pandas as pd
 import csv
 from datetime import datetime
 import yaml 
+from utils.clean_session_info import clean_session
 
 log = logging.getLogger(__name__)
 
@@ -74,40 +75,45 @@ def run_first_stage_no_inputs(context, destination, project):
     for session in project.sessions():
         print(f"\t\t{session.subject.label}")
         subject = session.subject
-        print(f"\t\t{session.label}")
-        session = session.reload()
+        subject = subject.reload()
+        if subject.type != "Phantom":
+            print(f"\t\t{session.label}")
+            session = session.reload()
 
-        # Dictionary from session.info
-        ses_dict = session.info
-        #prepopulate if CDE fields are not present
-        # Add missing metadata fields without overwriting existing values
-        for key, default_value in CDE.items():
+            # Dictionary from session.info
+            ses_dict = session.info
+            #prepopulate if CDE fields are not present
+            # Add missing metadata fields without overwriting existing values
+            for key, _ in CDE.items():
 
-            if key in ses_dict:
-                # If the key exists, skip it
-                continue
-            else:
-                ses_dict[key] = None
-                
-        session.update_info(ses_dict)
+                if key in ses_dict:
+                    # If the key exists, skip it
+                    continue
+                else:
+                    ses_dict[key] = None
+        
+            ses_dict = clean_session(ses_dict)
+            session.replace_info(ses_dict)
+            
 
+            # Add additional info to the dictionary
+            ses_dict['group_id'] = group
+            ses_dict['project_id'] = project.label
+            ses_dict['subject_id'] = subject.label
+            ses_dict['session_id'] = session.label
 
-        # Add additional info to the dictionary
-        ses_dict['group_id'] = group
-        ses_dict['project_id'] = project.label
-        ses_dict['subject_id'] = subject.label
-        ses_dict['session_id'] = session.label
+            # Check for new keys in the ses_dict and update headers
+            new_keys = [key for key in ses_dict.keys() if key not in all_fieldnames]
+            if new_keys:
+                all_fieldnames.extend(new_keys)  # Add any new keys to the fieldnames
 
-        # Check for new keys in the ses_dict and update headers
-        new_keys = [key for key in ses_dict.keys() if key not in all_fieldnames]
-        if new_keys:
-            all_fieldnames.extend(new_keys)  # Add any new keys to the fieldnames
-
-         # Add the row to our collection of rows
-        all_rows.append({key: ses_dict.get(key, CDE.get(key, '')) for key in all_fieldnames})
+            # Add the row to our collection of rows
+            all_rows.append({key: ses_dict.get(key, None) for key in all_fieldnames})
 
     # After processing all sessions, write the CSV with updated headers
     write_csv(filename, all_fieldnames, all_rows)
 
     print(f"Data saved to {filename}")
     return 0  # all is well
+
+
