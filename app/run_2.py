@@ -6,6 +6,7 @@ import csv
 import ast
 import yaml
 import sys
+from pathlib import Path
 from utils.clean_session_info import clean_session
 
 log = logging.getLogger(__name__)
@@ -78,7 +79,11 @@ def parse_value(val, target_type):
         return None
 
 def cast_metadata_fields(df, template):
+    identifier_columns = {'group_id', 'project_id', 'subject_id', 'session_id'}
     for col in df.columns:
+        if col in identifier_columns:
+            df[col] = df[col].apply(lambda x: None if pd.isna(x) else str(x).strip())
+            continue
         if col in template:
             example = template[col]
             if isinstance(example, bool):
@@ -150,11 +155,15 @@ def run_second_stage_with_inputs(api_key, run_level, df):
 
     
     #Rename columns in case the csv uploaded is using the old template
-    with open(f"/flywheel/v0/utils/old_new_harmonization.yaml", 'r') as file:
-        metadata = yaml.safe_load(file)
+    harmonization_path = Path("/flywheel/v0/utils/old_new_harmonization.yaml")
+    if harmonization_path.exists():
+        with harmonization_path.open('r') as file:
+            metadata = yaml.safe_load(file)
 
-    old_key_new_key = metadata['old_key_new_key']
-    csv_data.rename(columns=old_key_new_key, inplace=True, errors='ignore')
+        old_key_new_key = metadata.get('old_key_new_key', {})
+        csv_data.rename(columns=old_key_new_key, inplace=True, errors='ignore')
+    else:
+        log.info("Skipping legacy column harmonization; old_new_harmonization.yaml not found")
 
 
     csv_data = cast_metadata_fields(csv_data, metadata_template)
@@ -167,11 +176,24 @@ def run_second_stage_with_inputs(api_key, run_level, df):
             session_id = row['session_id']
 
             group = fw.lookup(group_id)
-            project = group.projects.find_first(f'label={project_id}')
+            project = next(
+                (candidate for candidate in group.projects() if candidate.label == project_id),
+                None,
+            )
+            if project is None:
+                return f"Project {project_id} not found in group {group_id}"
             project = project.reload()
-            subject = project.subjects.find_first(f"label='{subject_id}'")
+            subject = next(
+                (candidate for candidate in project.subjects() if candidate.label == subject_id),
+                None,
+            )
+            if subject is None:
+                return f"Subject {subject_id} not found in project {project_id}"
             subject = subject.reload()
-            session = subject.sessions.find_first(f"label='{session_id}'")
+            session = next(
+                (candidate for candidate in subject.sessions() if candidate.label == session_id),
+                None,
+            )
 
             if session:
                 session = session.reload()
