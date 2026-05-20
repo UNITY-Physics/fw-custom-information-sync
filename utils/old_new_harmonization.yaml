@@ -1,0 +1,46 @@
+old_key_new_key : { 
+            
+            "CohortLocation_country":"cohortLocation_country", "Timepoint":"studyTimepoint", 
+            "Other:childBMI": "other:childBMI" ,   "Other:childWAZ": "other:childWAZ", 
+            "MaternalEducation_HHS" : "maternalEducation_HHS", "MaternalEducation_schoolingYears": "maternalEducation_schoolingYears", 
+            "ChildSES":"childSES",
+            
+            "estimated_hc_cm": 'childTimepointHC_MRI_cm', "estimatd_hc_cm" : 'childTimepointHC_MRI_cm',
+            
+            "age_at_scan_months": "childTimepointAge_months",
+            "gestational_age_weeks": "childGestation_weeks",
+            "sex_at_birth": "childBiologicalSex",
+            "birth_weight_kg": "childBirthWeight_kgs",
+            "birth_length_cm": "childBirthLength_cm",
+            "birth_HC_cm": "childBirthHC_cm",
+            "num_children_in_family": "timepoint_otherChildrenLivingWithChild",
+            "birth_order": "childBirthOrdinal",
+
+            "child_ethnicity": "childEthnicity" ,
+            "child_race": "childRace",
+            "child_religion": "childReligion" ,
+            "child_caste": "childCaste",
+
+            "child_health_group": "childTimepointHealthGroup", 
+
+            "current_height_cm": "childTimepointHeight_cm",
+
+            "current_weight_kg": "childTimepointWeight_kgs",
+            "country_of_birth": "childCountryOfBirth",
+            "city_of_birth": "childCityOfBirth",
+            "maternal_age_at_birth": "maternalAgeAtChildBirth_years",
+            "maternal_education": "maternalEducation_HHS",
+            
+            "maternal_education_years": "maternalEducation_schoolingYears",
+            "current_hc_cm": 'childTimepointHC_measured_cm',
+            "birth_hc_cm": "childBirthHC_cm",
+
+            "num_children_in_household":"timepoint_otherChildrenLivingWithChild",
+            "num_adults_in_household": "timepoint_adultsLivingWithChild",
+            "family_size_at_scan":  'timepoint_FamilySize',
+            "timepointFamilySize":"timepoint_FamilySize"
+        
+            }
+
+
+delete_keys : ["father_owns_cellphone","mother_owns_cellphone","current_head_circumference_cm"]
