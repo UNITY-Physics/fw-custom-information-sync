@@ -23,6 +23,7 @@ def load_inputs(
     api_key = gear_context.get_input("api-key").get("key")
 
     df = gear_context.get_input_path("session_info")
+    site_config_path = gear_context.get_input_path("site_config")
 
     if df:
         log.info(f"Loaded {df}")
@@ -31,4 +32,9 @@ def load_inputs(
         log.info("Session spreadsheet not provided")
         inputs_provided = False
 
-    return api_key, inputs_provided, df
+    if site_config_path:
+        log.info(f"Loaded site config {site_config_path}")
+    else:
+        log.info("No site config provided; falling back to v1 canonical column matching")
+
+    return api_key, inputs_provided, df, site_config_path

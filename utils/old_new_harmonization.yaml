@@ -1,12 +1,32 @@
 old_key_new_key : { 
             
-            "CohortLocation_country":"cohortLocation_country", "Timepoint":"studyTimepoint", 
-            "Other:childBMI": "other:childBMI" ,   "Other:childWAZ": "other:childWAZ", 
-            "MaternalEducation_HHS" : "maternalEducation_HHS", "MaternalEducation_schoolingYears": "maternalEducation_schoolingYears", 
-            "ChildSES":"childSES",
-            
-            "estimated_hc_cm": 'childTimepointHC_MRI_cm', "estimatd_hc_cm" : 'childTimepointHC_MRI_cm',
-            
+            # Casing fixes — old lowercase forms -> agreed canonical (v2 alignment)
+            "cohortLocation_city": "CohortLocation_city",
+            "cohortLocation_country": "CohortLocation_country",
+            "maternalEducation_HHS": "MaternalEducation_HHS",
+            "maternalEducation_schoolingYears": "MaternalEducation_schoolingYears",
+            "timepoint_FamilySize": "timepointFamilySize",
+
+            # Old agreed casing that was previously canonical (now reversed)
+            "CohortLocation_country": "CohortLocation_country",
+            "MaternalEducation_HHS": "MaternalEducation_HHS",
+            "MaternalEducation_schoolingYears": "MaternalEducation_schoolingYears",
+            "timepointFamilySize": "timepointFamilySize",
+
+            # Fields moved to Derived section — old keys in session custom info
+            "childHAZ": "HAZ",
+            "other:childBMI": "BMI",
+            "other:childWAZ": "WAZ",
+
+            # Legacy key renames
+            "Timepoint": "studyTimepoint",
+            "Other:childBMI": "BMI",
+            "Other:childWAZ": "WAZ",
+            "Other:BirthingLocation": "other:BirthingLocation",
+
+            "estimated_hc_cm": "childTimepointHC_MRI_cm",
+            "estimatd_hc_cm": "childTimepointHC_MRI_cm",
+
             "age_at_scan_months": "childTimepointAge_months",
             "gestational_age_weeks": "childGestation_weeks",
             "sex_at_birth": "childBiologicalSex",
@@ -16,31 +36,28 @@ old_key_new_key : {
             "num_children_in_family": "timepoint_otherChildrenLivingWithChild",
             "birth_order": "childBirthOrdinal",
 
-            "child_ethnicity": "childEthnicity" ,
+            "child_ethnicity": "childEthnicity",
             "child_race": "childRace",
-            "child_religion": "childReligion" ,
+            "child_religion": "childReligion",
             "child_caste": "childCaste",
 
-            "child_health_group": "childTimepointHealthGroup", 
+            "child_health_group": "childTimepointHealthGroup",
 
             "current_height_cm": "childTimepointHeight_cm",
-
             "current_weight_kg": "childTimepointWeight_kgs",
             "country_of_birth": "childCountryOfBirth",
             "city_of_birth": "childCityOfBirth",
             "maternal_age_at_birth": "maternalAgeAtChildBirth_years",
-            "maternal_education": "maternalEducation_HHS",
-            
-            "maternal_education_years": "maternalEducation_schoolingYears",
-            "current_hc_cm": 'childTimepointHC_measured_cm',
+            "maternal_education": "MaternalEducation_HHS",
+            "maternal_education_years": "MaternalEducation_schoolingYears",
+            "current_hc_cm": "childTimepointHC_measured_cm",
             "birth_hc_cm": "childBirthHC_cm",
 
-            "num_children_in_household":"timepoint_otherChildrenLivingWithChild",
+            "num_children_in_household": "timepoint_otherChildrenLivingWithChild",
             "num_adults_in_household": "timepoint_adultsLivingWithChild",
-            "family_size_at_scan":  'timepoint_FamilySize',
-            "timepointFamilySize":"timepoint_FamilySize"
+            "family_size_at_scan": "timepointFamilySize"
         
             }
 
 
-delete_keys : ["father_owns_cellphone","mother_owns_cellphone","current_head_circumference_cm"]
+delete_keys : ["father_owns_cellphone","mother_owns_cellphone","current_head_circumference_cm","other:combinedSES","other:paternalEDU","other:maternalEDU","other:BirthingLocation","childSES"]

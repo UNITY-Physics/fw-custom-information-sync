@@ -1,7 +1,5 @@
 import pytest
 
-pytest_plugins = ("flywheel_gear_toolkit.testing",)
-
 
 @pytest.fixture
 def print_captured():

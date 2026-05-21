@@ -1,0 +1,483 @@
+This is a well-scoped problem and your instinct to pause before building v2 is right — the template-fill approach has a fundamental UX ceiling that extra features won't fully fix.
+
+Let me lay out the tradeoffs honestly:
+
+---
+
+## The core problem with the template approach
+
+You're asking data managers at clinical sites — who are not necessarily technical — to:
+
+1. Download a CSV with exact subject/session labels
+2. Find and merge their offline data against it
+3. Preserve exact string matches (including timestamp session labels)
+4. Return it correctly formatted
+
+Even with good documentation, step 3 is where it will consistently break. Timestamp session labels as join keys are particularly fragile. The ID inconsistency (hyphen vs underscore) compounds this. You're essentially outsourcing a fuzzy join operation to a human, which is the worst of both worlds.
+
+v2 improvements like unit normalisation and unmatched variable reporting are genuinely useful, but they treat symptoms rather than the cause.
+
+---
+
+## The stronger architecture: site-specific config + server-side reconciliation
+
+Rather than having sites fill a template keyed to your internal labels, flip the model:
+
+**Sites upload their data in their own format. Your gear does the reconciliation.**
+
+The practical shape of this:
+
+### Site config files (per-project, stored on Flywheel)
+A YAML/JSON config attached to each project that encodes:
+```yaml
+id_field: "participant_id"          # their column name for subject
+id_transform: "replace('-', '_')"   # normalisation rule
+session_match: "date"               # match on date rather than timestamp
+session_date_field: "visit_date"
+session_date_format: "%d/%m/%Y"
+variable_map:
+  weight_kg: "Weight"               # their name → your canonical name
+  weight_unit: "kg"                 # or lbs → convert
+  gestational_age: "GA_weeks"
+  site_id: "TYGERBERG"              # hardcoded constants
+```
+
+### Gear behaviour
+- Sites upload their CSV (or REDCap export) as a gear input
+- Gear reads the project config, applies ID transforms, matches on date proximity if needed, maps variable names, normalises units
+- Gear returns a reconciliation report: matched sessions, unmatched rows (both sides), fields mapped, fields skipped
+- Only then writes to custom info
+
+### Why this is better
+- Sites never have to touch your internal labels
+- The fuzzy matching logic lives in one place under version control
+- Config files are auditable and reusable
+- The reconciliation report gives you QC visibility
+- Session matching on date (with a tolerance window) is far more robust than timestamp equality
+
+---
+
+## What's worth keeping from the current approach
+
+The existing v1 gear's "return a template" run is actually still useful as a **config scaffold generator** — it can produce a draft YAML config for a new site showing what fields are available and what the canonical names are. A site coordinator fills that once, then never has to touch it again for subsequent data uploads.
+
+---
+
+## Practical recommendation
+
+Given you have ~50 active projects and sites that are already partly onboarded with the current approach, a clean path forward:
+
+1. **Don't break v1** — keep it working for sites that are already using it comfortably
+2. **Build the config-driven approach as v2**, starting with 2–3 pilot sites where you know the data well (Tygerberg would be a natural first given your existing DICOM work there)
+3. **Invest in the reconciliation report output** — this is the feature that will build site trust and let you QC remotely without chasing emails
+4. **REDCap API integration** as a later addition — if sites are on REDCap, pulling directly via API with field mapping in the config removes the export step entirely
+
+The config-file-per-project model scales well because the complexity is captured in structured data rather than in site coordinator skill. Once a config is written and validated, subsequent data pushes become nearly automatic.
+
+
+
+This is where the distinction between:
+
+* **canonical variables**
+  vs
+* **site raw variables**
+
+becomes extremely important.
+
+If you try to force every spreadsheet into a rigid template forever, you will end up with:
+
+* brittle imports,
+* frustrated sites,
+* growing support burden,
+* and silent data loss.
+
+The scalable solution is usually:
+
+# Treat the upload as semi-structured input
+
+rather than:
+
+> “this CSV must perfectly match template columns”.
+
+Your importer should become increasingly tolerant, while your *output into Flywheel* remains strict and canonical.
+
+---
+
+# Recommended model
+
+## Layer 1 — Raw uploaded variables
+
+Accept whatever the site gives you.
+
+Example:
+
+| Site Column     |
+| --------------- |
+| BW              |
+| birthwt         |
+| birth_weight_kg |
+| WeightBirth     |
+| HCcm            |
+
+Do not reject immediately.
+
+---
+
+## Layer 2 — Mapping / harmonisation engine
+
+This decides:
+
+* known canonical variables,
+* aliases,
+* transforms,
+* unknown variables.
+
+---
+
+## Layer 3 — Canonical Flywheel fields
+
+Only validated harmonised variables get written into:
+
+* session info,
+* subject info,
+* analysis metadata.
+
+This separation is the key architectural shift.
+
+---
+
+# Handling “out-of-template” variables
+
+I would classify variables into categories.
+
+---
+
+# Category A — Canonical recognised variables
+
+These map automatically.
+
+Example:
+
+```yaml id="8d2k9m"
+birth_weight:
+  aliases:
+    - bw
+    - birthwt
+    - birth_weight_kg
+```
+
+Importer says:
+
+```text id="e0w0p4"
+Mapped:
+BW → birth_weight
+```
+
+No issue.
+
+---
+
+# Category B — Unknown but acceptable variables
+
+Example:
+
+* `nicu_days`
+* `maternal_smoking_trimester1`
+
+These are not yet standardised, but potentially valuable.
+
+Do NOT reject these.
+
+Instead:
+
+## Option 1 (best)
+
+Store under a namespace:
+
+```json id="5y7bdf"
+site_extra_variables: {
+    "nicu_days": 14,
+    "maternal_smoking_trimester1": "yes"
+}
+```
+
+or:
+
+```json id="xbr11h"
+custom_info.site_raw.nicu_days
+```
+
+This preserves information without polluting your harmonised schema.
+
+---
+
+## Option 2
+
+Return them in a validation report:
+
+```text id="8vtc5q"
+Unknown variables detected:
+- nicu_days
+- smoking_status_mother
+```
+
+Then:
+
+* admin reviews,
+* decides whether to add mappings.
+
+This becomes a natural schema evolution process.
+
+---
+
+# Category C — Ambiguous variables
+
+These are dangerous.
+
+Example:
+
+* `weight`
+
+Could mean:
+
+* birth weight,
+* current weight,
+* MRI-day weight.
+
+These should trigger warnings.
+
+Example:
+
+```text id="jlwmqp"
+Ambiguous variable:
+weight
+
+Possible mappings:
+- birth_weight
+- scan_weight
+```
+
+Do not auto-map unless confidence is extremely high.
+
+---
+
+# What happens across repeated uploads?
+
+This is the real operational problem you identified.
+
+A site may upload:
+
+## Run 1
+
+```text id="7mb8hn"
+birthwt
+```
+
+## Run 2
+
+```text id="n0k6c8"
+bw_kg
+```
+
+## Run 3
+
+```text id="0nhq51"
+BirthWeightKg
+```
+
+You do not want repeated manual intervention.
+
+---
+
+# Best solution: persistent site-level mapping memory
+
+Each project/site accumulates learned mappings.
+
+Example internal config:
+
+```yaml id="2v4wt7"
+known_aliases:
+  birthwt: birth_weight
+  bw_kg: birth_weight
+  BirthWeightKg: birth_weight
+```
+
+So the system “learns” site conventions over time.
+
+This is probably the single biggest usability improvement you could make.
+
+---
+
+# Suggested workflow
+
+## Upload step
+
+Site uploads:
+
+* arbitrary CSV,
+* REDCap export,
+* spreadsheet.
+
+---
+
+## Harmonisation engine
+
+System:
+
+1. identifies rows,
+2. matches IDs,
+3. maps known variables,
+4. flags unknowns,
+5. previews transformations.
+
+---
+
+## Validation report
+
+Return:
+
+```text id="5brk9r"
+Matched sessions: 182
+Matched variables: 24
+
+Unknown variables:
+- nicu_days
+- smoking_trim1
+
+Ambiguous variables:
+- weight
+
+Unmatched sessions:
+- sub_004 visit_2
+```
+
+---
+
+## User/Admin approval
+
+Then:
+
+* accept,
+* edit mappings,
+* save new aliases permanently.
+
+---
+
+# Important recommendation:
+
+## Do not require templates forever
+
+Templates are useful initially because they:
+
+* constrain chaos,
+* teach structure,
+* bootstrap the process.
+
+But long-term, rigid templates become the bottleneck.
+
+The mature version of your system probably becomes:
+
+> “Upload whatever you have, and we harmonise + validate it.”
+
+That is effectively how large-scale clinical data integration systems evolve.
+
+---
+
+# Another important design decision
+
+## Separate:
+
+### “canonical schema”
+
+from
+
+### “site upload schema”
+
+Your canonical schema should remain:
+
+* small,
+* curated,
+* versioned,
+* stable.
+
+Do not let every site-specific variable become canonical.
+
+Otherwise the ontology explodes.
+
+---
+
+# What I would probably implement practically
+
+## Core canonical variable registry
+
+Example:
+
+| Canonical Name  | Type  | Unit  | Required |
+| --------------- | ----- | ----- | -------- |
+| birth_weight    | float | kg    | no       |
+| gestational_age | float | weeks | yes      |
+
+---
+
+## Site-specific alias tables
+
+Example:
+
+| Site     | Uploaded Variable | Canonical    |
+| -------- | ----------------- | ------------ |
+| Kenya01  | bw                | birth_weight |
+| Brazil02 | peso_nasc         | birth_weight |
+
+---
+
+## Validation engine
+
+Checks:
+
+* types,
+* units,
+* ranges,
+* duplicates,
+* ambiguity.
+
+---
+
+# One very useful feature
+
+## “Suggest mapping” mode
+
+Not fully automatic.
+
+Instead:
+
+```text id="r6y5gm"
+Suggested mappings:
+bw_kg → birth_weight (92% confidence)
+ga_wks → gestational_age (98% confidence)
+```
+
+Human approves once.
+
+Then saved permanently.
+
+This gives flexibility without dangerous automation.
+
+---
+
+# Architecturally, you are moving toward
+
+Not just:
+
+> “metadata sync gear”
+
+but effectively:
+
+> “lightweight clinical data harmonisation middleware”.
+
+That is a valuable capability in multi-site imaging networks, especially because most systems either:
+
+* overengineer it into a full data warehouse,
+  or
+* leave sites doing endless manual Excel wrangling.
+
+Your current direction is actually in a fairly good middle ground.

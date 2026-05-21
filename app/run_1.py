@@ -1,6 +1,7 @@
 """First run of gear with no inputs, gathers labels for subjects, sessions, and custom inforamation for session"""
 
 import logging
+import shutil
 
 import flywheel
 import pandas as pd
@@ -47,8 +48,10 @@ def run_first_stage_no_inputs(context, destination, project):
     demographics_cde = metadata['Demographics']
     ses_cde = metadata['SES']
     cognitive_cde = metadata['Cognitive']
+    clinical_cde = metadata.get('Clinical', {})
+    derived_cde = metadata.get('Derived', {})
 
-    CDE = demographics_cde | ses_cde | cognitive_cde 
+    CDE = demographics_cde | ses_cde | cognitive_cde | clinical_cde | derived_cde
 
     for field in CDE:
         all_fieldnames.append(field)
@@ -114,6 +117,14 @@ def run_first_stage_no_inputs(context, destination, project):
     write_csv(filename, all_fieldnames, all_rows)
 
     print(f"Data saved to {filename}")
+
+    # Optionally write the site config template to output
+    if context.config.get('download_site_config_template', False):
+        template_src = "/flywheel/v0/utils/site_config_template.yaml"
+        template_dst = "/flywheel/v0/output/site_config_template.yaml"
+        shutil.copy(template_src, template_dst)
+        print(f"Site config template written to {template_dst}")
+
     return 0  # all is well
 
 

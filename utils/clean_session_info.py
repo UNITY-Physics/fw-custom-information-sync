@@ -36,7 +36,9 @@ def clean_session(ses_dict):
     demographics_cde = defaults['Demographics']
     ses_cde = defaults['SES']
     cognitive_cde = defaults['Cognitive']
-    defaults_template = demographics_cde | ses_cde | cognitive_cde 
+    clinical_cde = defaults.get('Clinical', {})
+    derived_cde = defaults.get('Derived', {})
+    defaults_template = demographics_cde | ses_cde | cognitive_cde | clinical_cde | derived_cde
 
     
     

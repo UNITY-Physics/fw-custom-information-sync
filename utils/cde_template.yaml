@@ -1,10 +1,25 @@
+# Canonical Data Element (CDE) template for UNITY Custom Information Sync gear.
+# Field name casing aligns with final_agreed_columns.csv (UNITY consortium v2 agreement).
+# Default value determines inferred type: 0 -> float, None -> str, True -> bool, [] -> list.
+# Sections: Demographics, SES, Cognitive, Clinical, Derived, SiteRaw
+# Backup of previous version: cde_template.yaml.bak
+
 Demographics : {
 
-        'cohortLocation_city': None,
-        'cohortLocation_country': None,
+        # --- Study / cohort identifiers ---
+        'CohortName': None,
+        'CohortLocation_city': None,
+        'CohortLocation_country': None,
+        'SubCohort_Group': None,
+        'StudyID': None,
+        'UniqueStudyID': None,
+
+        # --- Session / MRI metadata ---
         'MRI_fieldStrength': 0,
-        'mriCollectedAtTimepoint': True,
         'studyTimepoint': None,
+        'mriCollectedAtTimepoint': True,
+
+        # --- Timepoint anthropometrics ---
         'childTimepointAge_days': 0,
         'childTimepointAge_months': 0,
         'childTimepointHeight_cm': 0,
@@ -12,7 +27,14 @@ Demographics : {
         'childTimepointWeight_kgs': 0,
         'childTimepointWeight_lbs': 0,
         'childTimepointHC_measured_cm': 0,
-        'childHAZ': 0,
+        'childTimepointHC_MRI_cm': 0,
+
+        # --- Household composition ---
+        'timepointFamilySize': 0,
+        'timepoint_adultsLivingWithChild': 0,
+        'timepoint_otherChildrenLivingWithChild': 0,
+
+        # --- Child characteristics ---
         'childBiologicalSex': None,
         'childGestation_days': 0,
         'childGestation_weeks': 0,
@@ -21,103 +43,118 @@ Demographics : {
         'childBirthLength_cm': 0,
         'childBirthLength_inches': 0,
         'childBirthHC_cm': 0,
+        'maternalAgeAtChildBirth_years': 0,
+        'childBirthOrdinal': 0,
         'childCountryOfBirth': None,
         'childCityOfBirth': None,
         'childRace': None,
         'childEthnicity': None,
         'childReligion': None,
         'childCaste': None,
-        'childBirthOrdinal': 0,
-        'maternalAgeAtChildBirth_years': 0,
-        'timepoint_FamilySize': 0,
-        'timepoint_adultsLivingWithChild': 0,
-        'timepoint_otherChildrenLivingWithChild': 0,
-        'other:childBMI': 0,
-        'other:childWAZ': 0,
-        'other:BirthingLocation': None,
-        'childTimepointHealthGroup': [],
 }
 
-SES : { 
-        'maternalEducation_HHS': None,
-        'maternalEducation_schoolingYears': 0,
-        'childSES': None,
-        'other:combinedSES': None,
-        'other:paternalEDU': 0,
-        'other:maternalEDU': 0,
+SES : {
+        'MaternalEducation_HHS': None,
+        'MaternalEducation_schoolingYears': 0,
         }
 
-Cognitive : { 
-      # GSED
-    'gsed_LongForm_DAZScore': 0,
-    'gsed_ShortForm_DAZScore': 0,
+Cognitive : {
+        # GSED
+        'gsed_LongForm_DAZScore': 0,
+        'gsed_ShortForm_DAZScore': 0,
 
-    # MSEL
-    'msel_ELC': 0,
-    'msel_VDQ': 0,
-    'msel_NVDQ': 0,
-    'msel_FM_T': 0,
-    'msel_GM_T': 0,
-    'msel_EL_T': 0,
-    'msel_RL_T': 0,
-    'msel_VR_T': 0,
+        # MSEL
+        'msel_ELC': 0,
+        'msel_VDQ': 0,
+        'msel_NVDQ': 0,
+        'msel_FM_T': 0,
+        'msel_GM_T': 0,
+        'msel_EL_T': 0,
+        'msel_RL_T': 0,
+        'msel_VR_T': 0,
 
-    # BSID
-    'bsid_CCS': None,
-    'bsid_LCS': None,
-    'bsid_MCS': None,
-    'bsid_cognitiveScaled': None,
-    'bsid_receptiveLanguageScaled': None,
-    'bsid_expressiveLanguageScaled': None,
-    'bsid_fineMotorScaled': None,
-    'bsid_grossMotorScaled': None,
-    'bsid_adaptiveBehaviorScaled': None,
-    'bsid_socioemotionalScaled': None,
+        # BSID
+        'bsid_CCS': None,
+        'bsid_LCS': None,
+        'bsid_MCS': None,
+        'bsid_cognitiveScaled': None,
+        'bsid_receptiveLanguageScaled': None,
+        'bsid_expressiveLanguageScaled': None,
+        'bsid_fineMotorScaled': None,
+        'bsid_grossMotorScaled': None,
+        'bsid_adaptiveBehaviorScaled': None,
+        'bsid_socioemotionalScaled': None,
 
-    # ASQ
-    'asq_Communication': 0,
-    'asq_GrossMotor': 0,
-    'asq_FineMotor': 0,
-    'asq_ProblemSolving': 0,
-    'asq_SocialIssues': 0,
+        # ASQ
+        'asq_Communication': 0,
+        'asq_GrossMotor': 0,
+        'asq_FineMotor': 0,
+        'asq_ProblemSolving': 0,
+        'asq_SocialIssues': 0,
 
-    # WPPSI
-    'wppsi_FSIQ': 0,
-    'wppsi_VCI': 0,
-    'wppsi_VSI': 0,
-    'wppsi_FRI': 0,
-    'wppsi_WMI': 0,
-    'wppsi_PSI': 0,
-    'wppsi_bugSearchScales': 0,
-    'wppsi_cancellationScaled': 0,
-    'wppsi_pictureMemoryScaled': 0,
-    'wppsi_zooScaled': 0,
-    'wppsi_blockDesignedScaled': 0,
-    'wppsi_objectAssemblyScaled': 0,
-    'wppsi_pictureConceptsScaled': 0,
-    'wppsi_matrixReasoningScaled': 0,
-    'wppsi_similaritiesScaled': 0,
-    'wppsi_vocabularyScaled': 0,
+        # WPPSI
+        'wppsi_FSIQ': 0,
+        'wppsi_VCI': 0,
+        'wppsi_VSI': 0,
+        'wppsi_FRI': 0,
+        'wppsi_WMI': 0,
+        'wppsi_PSI': 0,
+        'wppsi_bugSearchScales': 0,
+        'wppsi_cancellationScaled': 0,
+        'wppsi_pictureMemoryScaled': 0,
+        'wppsi_zooScaled': 0,
+        'wppsi_blockDesignedScaled': 0,
+        'wppsi_objectAssemblyScaled': 0,
+        'wppsi_pictureConceptsScaled': 0,
+        'wppsi_matrixReasoningScaled': 0,
+        'wppsi_similaritiesScaled': 0,
+        'wppsi_vocabularyScaled': 0,
 
-    # WISC
-    'wisc_FSIQ': 0,
-    'wisc_VCI': 0,
-    'wisc_VSI': 0,
-    'wisc_FRI': 0,
-    'wisc_WMI': 0,
-    'wisc_PSI': 0,
-    'wisc_similaritiesScaled': 0,
-    'wisc_vocabScaled': 0,
-    'wisc_BlockDesigScaled': 0,
-    'wisc_visualPuzzlesScaled': 0,
-    'wisc_matrixReasoningScaled': 0,
-    'wisc_figureWeightsScaled': 0,
-    'wisc_digitSpanScaled': 0,
-    'wisc_pictureSpanScaled': 0,
-    'wisc_CodingScaled': 0,
-    'wisc_symbolSearchScaled': 0,
+        # WISC
+        'wisc_FSIQ': 0,
+        'wisc_VCI': 0,
+        'wisc_VSI': 0,
+        'wisc_FRI': 0,
+        'wisc_WMI': 0,
+        'wisc_PSI': 0,
+        'wisc_similaritiesScaled': 0,
+        'wisc_vocabScaled': 0,
+        'wisc_BlockDesigScaled': 0,
+        'wisc_visualPuzzlesScaled': 0,
+        'wisc_matrixReasoningScaled': 0,
+        'wisc_figureWeightsScaled': 0,
+        'wisc_digitSpanScaled': 0,
+        'wisc_pictureSpanScaled': 0,
+        'wisc_CodingScaled': 0,
+        'wisc_symbolSearchScaled': 0,
 
-    # AAB
-    'aab_lwrScaled': 0,
-    'aab_mcScaled': 0
+        # AAB
+        'aab_lwrScaled': 0,
+        'aab_mcScaled': 0,
+        }
+
+Clinical : {
+        # Child health status
+        'childTimepointHealthGroup': [],
+        }
+
+Derived : {
+        # WHO anthropometry z-scores (derived from height/weight/HC at timepoint)
+        'BMI': 0,
+        'BMIZ': 0,
+        'WAZ': 0,
+        'HAZ': 0,
+        'WHZ': 0,
+        'HCZ': 0,
+
+        # Nutritional status flags (derived from z-scores)
+        'CurrentlyStunted': True,
+        'CurrentlyWasted': True,
+        'EverStunted': True,
+        'EverWasted': True,
+        }
+
+SiteRaw : {
+        # Placeholder for site-specific variables stored under site_raw.* namespace.
+        # Populated at runtime by the harmonisation engine; never written to cde_template.
         }

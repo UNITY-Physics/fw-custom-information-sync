@@ -7,6 +7,16 @@
       "default": false,
       "description": "Whether or not to perform a dry run, logging what would be changed without actually changing it. Default = False",
       "type": "boolean"
+    },
+    "store_site_raw": {
+      "default": false,
+      "description": "When enabled, columns matched by site_raw_pattern in the site config are stored under session custom_info.site_raw.*. When disabled (default), only canonical variables are written. Variables already written as canonical are never duplicated in site_raw.",
+      "type": "boolean"
+    },
+    "download_site_config_template": {
+      "default": false,
+      "description": "When enabled, the gear will write a copy of site_config_template.yaml to the output folder. Download and complete this file to map your site's column names to canonical field names before running with a session_info CSV.",
+      "type": "boolean"
     }
   },
   "custom": {
@@ -16,7 +26,7 @@
     },
     "gear-builder": {
       "category": "analysis",
-      "image": "flywheel/custom-information-sync:0.1.10"
+      "image": "flywheel/custom-information-sync:0.1.12"
     }
   },
   "description": "This gear offers a way to modify custom information in session containers synced to a csv. Running custom-information-sync as a project-level analysis will generate a CSV file that will be populated with a unique list of subject, session labels along with existing custom information. This CSV file needs to be downloaded and modified to provide new custom information for any missing sessions. Edited CSV files are then uploaded to the project as an attachment and provided as input to a run of this same gear to modify session custom info. For more information, please see the README in the source repository.",
@@ -51,6 +61,11 @@
       "description": "CSV file containing new custom info for sessions",
       "optional": true
     },
+    "site_config": {
+      "base": "file",
+      "description": "Site config YAML file mapping your column names to canonical field names. Generate the template by enabling the 'download_site_config_template' config option on a Run 1 (no inputs) run.",
+      "optional": true
+    },
     "api-key": {
       "base": "api-key",
       "read-only": true
@@ -62,5 +77,5 @@
   "name": "custom-information-sync",
   "source": "",
   "url": "",
-  "version": "0.1.10"
+  "version": "0.1.12"
 }

@@ -22,9 +22,9 @@ def main(context: GearToolkitContext) -> None:  # pragma: no cover
 
     dry_run = parse_config(context)  # parse config.json
 
-    api_key, inputs_provided, df = load_inputs(context)
+    api_key, inputs_provided, df, site_config_path = load_inputs(context)
 
-    e_code = run(context, inputs_provided, df, api_key)
+    e_code = run(context, inputs_provided, df, api_key, site_config_path)
 
     sys.exit(e_code)
 
