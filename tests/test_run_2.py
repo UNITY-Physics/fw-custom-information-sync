@@ -11,7 +11,7 @@ import pandas as pd
 from datetime import datetime, timedelta, date
 from pathlib import Path
 
-from app.run_2 import apply_site_config, cast_metadata_fields
+from app.run_2 import apply_site_config, cast_metadata_fields, _parse_csv_date, _parse_label_as_date
 
 # ---------------------------------------------------------------------------
 # Fixture data
@@ -307,3 +307,51 @@ class TestDateParsing:
         tolerance = timedelta(days=0)
         assert abs((site_date - site_date).days) <= tolerance.days        # same day ✓
         assert not (abs((date(2025, 1, 3) - site_date).days) <= tolerance.days)  # 1d away ✗
+
+
+class TestParseCsvDate:
+
+    def test_configured_format_used_first(self):
+        d, fmt = _parse_csv_date("30/03/2026", "%d/%m/%Y")
+        assert d == date(2026, 3, 30)
+        assert fmt == "%d/%m/%Y"
+
+    def test_two_digit_year_fallback(self):
+        d, fmt = _parse_csv_date("30/03/26", "%d/%m/%Y")
+        assert d == date(2026, 3, 30)
+        assert fmt == "%d/%m/%y"
+
+    def test_iso_fallback(self):
+        d, fmt = _parse_csv_date("2026-03-30", "%d/%m/%Y")
+        assert d == date(2026, 3, 30)
+        assert fmt == "%Y-%m-%d"
+
+    def test_unrecognised_returns_none(self):
+        d, fmt = _parse_csv_date("not-a-date", "%d/%m/%Y")
+        assert d is None
+        assert fmt is None
+
+
+class TestParseLabelAsDate:
+
+    def test_flywheel_dicom_label(self):
+        # Flywheel DICOM-derived label: YYYY-MM-DD_HH_MM_SS
+        d = _parse_label_as_date("2026-03-30_15_41_04")
+        assert d == date(2026, 3, 30)
+
+    def test_iso_date_label(self):
+        d = _parse_label_as_date("2024-01-01")
+        assert d == date(2024, 1, 1)
+
+    def test_slash_date_label(self):
+        d = _parse_label_as_date("01/06/2025")
+        assert d == date(2025, 6, 1)
+
+    def test_primary_format_takes_priority(self):
+        # With primary %d/%m/%Y, "01/06/2025" = June 1
+        d = _parse_label_as_date("01/06/2025", "%d/%m/%Y")
+        assert d == date(2025, 6, 1)
+
+    def test_unparseable_returns_none(self):
+        d = _parse_label_as_date("not-a-date")
+        assert d is None

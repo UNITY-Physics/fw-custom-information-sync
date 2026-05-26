@@ -196,13 +196,18 @@ variable_map:
 
 # Remap raw cell values in a column to canonical controlled-vocabulary values.
 # Keys must be canonical field names that also appear in variable_map above.
-value_map: {}
-# Example:
-#   childBiologicalSex:
-#     "yes": "Male"
-#     "no": "Female"
-#     "1": "Male"
-#     "0": "Female"
+#
+# IMPORTANT: use block style (indented lines), NOT flow style ({...}).
+# Correct:
+#   value_map:
+#     childBiologicalSex:
+#       "yes": "Male"
+#       "no": "Female"
+# Wrong (causes YAML parse error):
+#   value_map: {
+#     childBiologicalSex: ...
+#   }
+value_map:
 
 # --- Unit conversions ---
 
@@ -215,16 +220,9 @@ value_map: {}
 #   head circumference -> cm
 #   gestational age  -> weeks
 #   age              -> days
-unit_map: {}
-# Example:
-#   childBirthWeight_kgs:
-#     source_unit: "lbs"
-#     target_unit: "kg"
-#     conversion: "multiply_by_0.453592"
-#   childTimepointHeight_cm:
-#     source_unit: "inches"
-#     target_unit: "cm"
-#     conversion: "multiply_by_2.54"
+#
+# IMPORTANT: use block style (indented lines), NOT flow style ({...}).
+unit_map:
 
 # --- Column filtering ---
 

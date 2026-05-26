@@ -19,6 +19,67 @@ import flywheel
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# Date formats tried when parsing session labels (order = priority)
+# Includes Flywheel's DICOM-derived label format (YYYY-MM-DD_HH_MM_SS)
+_LABEL_DATE_FORMATS = [
+    '%Y-%m-%d_%H_%M_%S',  # Flywheel DICOM label: 2026-03-30_15_41_04
+    '%Y-%m-%dT%H:%M:%S',  # ISO datetime: 2026-03-30T15:41:04
+    '%Y-%m-%d',           # ISO date: 2024-01-01
+    '%Y/%m/%d',           # 2024/12/01
+    '%d/%m/%Y',           # 01/06/2025
+    '%d/%m/%y',           # 01/06/25  (Excel UK 2-digit year)
+    '%m/%d/%Y',           # 06/01/2025
+    '%m/%d/%y',           # 06/01/25  (Excel US 2-digit year)
+    '%d-%m-%Y',           # 01-06-2025
+    '%d-%m-%y',           # 01-06-25
+]
+
+def _parse_label_as_date(label, primary_format=None):
+    """Try to parse a session label string as a date.
+    Tries primary_format first (if given), then common fallback formats.
+    Returns a date object, or None if nothing matched.
+    """
+    formats = []
+    if primary_format:
+        formats.append(primary_format)
+    for fmt in _LABEL_DATE_FORMATS:
+        if fmt not in formats:
+            formats.append(fmt)
+    label = (label or '').strip()
+    for fmt in formats:
+        try:
+            return datetime.strptime(label, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _parse_csv_date(date_str, primary_format):
+    """Parse a date string from a site CSV.
+    Tries primary_format first, then derives a 2-digit-year variant,
+    then other common formats.
+    Returns (date, format_used) or (None, None) if nothing matched.
+    """
+    fallbacks = [primary_format]
+    # Derive 2-digit-year variant of the configured format (e.g. %d/%m/%Y -> %d/%m/%y)
+    two_digit = primary_format.replace('%Y', '%y')
+    if two_digit != primary_format and two_digit not in fallbacks:
+        fallbacks.append(two_digit)
+    # Additional common formats
+    for fmt in [
+        '%Y-%m-%d', '%d/%m/%Y', '%d/%m/%y',
+        '%m/%d/%Y', '%m/%d/%y', '%d-%m-%Y', '%d-%m-%y', '%Y/%m/%d',
+    ]:
+        if fmt not in fallbacks:
+            fallbacks.append(fmt)
+    date_str = (date_str or '').strip()
+    for fmt in fallbacks:
+        try:
+            return datetime.strptime(date_str, fmt).date(), fmt
+        except ValueError:
+            continue
+    return None, None
+
 def parse_maybe_list(val):
     val = str(val).strip()
     try:
@@ -156,11 +217,17 @@ def apply_site_config(df, site_config):
     # 5. unit_map: numeric unit conversion before type casting
     unit_map = site_config.get('unit_map') or {}
     for field, conv in unit_map.items():
-        if field in df.columns:
-            conversion = conv.get('conversion', '')
-            if conversion.startswith('multiply_by_'):
-                factor = float(conversion.replace('multiply_by_', ''))
-                df[field] = pd.to_numeric(df[field], errors='coerce') * factor
+        if field not in df.columns:
+            log.warning(
+                "unit_map: field '%s' not found in CSV (after variable_map renames) — "
+                "skipping conversion. Ensure variable_map and unit_map use the same "
+                "canonical field name.", field
+            )
+            continue
+        conversion = conv.get('conversion', '')
+        if conversion.startswith('multiply_by_'):
+            factor = float(conversion.replace('multiply_by_', ''))
+            df[field] = pd.to_numeric(df[field], errors='coerce') * factor
 
     # 6. Identify site_raw columns via regex pattern (routed to site_raw namespace)
     # Accept both 'site_raw_pattern' and legacy 'gsed_item_pattern' key names
@@ -222,7 +289,17 @@ def run_second_stage_with_inputs(
     site_config = None
     if site_config_path:
         with open(site_config_path, 'r') as f:
-            site_config = yaml.safe_load(f)
+            try:
+                site_config = yaml.safe_load(f)
+            except yaml.YAMLError as exc:
+                print(
+                    f"Failed to parse site config YAML: {exc}\n"
+                    "Common cause: using '{{' for multi-line mappings (value_map, unit_map).\n"
+                    "Use block style (indented lines) instead of flow style ({{...}}).\n"
+                    "See the examples in site_config_template.yaml.\n"
+                    "Exiting."
+                )
+                sys.exit(1)
         print(f"Loaded site config from {site_config_path}")
 
     print(f"Reading CSV at {run_level} level")
@@ -289,10 +366,12 @@ def run_second_stage_with_inputs(
             'subject_id': subject_id,
             'session_id': session_id,
             'match_status': 'not_found',
+            'match_method': '',
             'fields_written': [],
             'canonical_empty': [],
             'pre_existing': [],
             'site_raw_written': [],
+            'unknown_skipped': [],
         }
 
         try:
@@ -307,23 +386,47 @@ def run_second_stage_with_inputs(
             # --- Session matching ---
             if session_match_mode == 'date':
                 date_str = str(row.get(session_date_field, '')).strip()
-                try:
-                    site_date = datetime.strptime(date_str, session_date_format).date()
-                except ValueError as exc:
+                site_date, used_fmt = _parse_csv_date(date_str, session_date_format)
+                if site_date is None:
                     audit['match_status'] = (
-                        f'error: invalid date "{date_str}" '
-                        f'for format "{session_date_format}": {exc}'
+                        f'error: could not parse date "{date_str}" '
+                        f'with configured format "{session_date_format}" '
+                        f'or any common fallback format'
                     )
                     return audit
-                candidates = [
-                    s for s in subject.sessions()
-                    if s.timestamp
-                    and abs((s.timestamp.date() - site_date).days) <= session_date_tolerance.days
-                ]
+                fmt_note = f' (fallback fmt: {used_fmt})' if used_fmt != session_date_format else ''
+                # Build candidates: match via session.timestamp OR session.label parsed as date.
+                # session.timestamp may be null for manually-created sessions;
+                # session.label is often a datetime string derived from the DICOM series date.
+                seen_ids = set()
+                candidates = []
+                match_methods = {}
+                for s in subject.sessions():
+                    matched = False
+                    method = None
+                    # 1. Try session.timestamp
+                    if s.timestamp:
+                        try:
+                            ts_date = s.timestamp.date()
+                            if abs((ts_date - site_date).days) <= session_date_tolerance.days:
+                                matched = True
+                                method = 'timestamp'
+                        except Exception:
+                            pass
+                    # 2. Try session label parsed as a date (using configured format + common fallbacks)
+                    if not matched:
+                        label_date = _parse_label_as_date(s.label, session_date_format)
+                        if label_date and abs((label_date - site_date).days) <= session_date_tolerance.days:
+                            matched = True
+                            method = 'label'
+                    if matched and s.id not in seen_ids:
+                        seen_ids.add(s.id)
+                        candidates.append(s)
+                        match_methods[s.id] = method
                 if len(candidates) == 0:
                     audit['match_status'] = (
                         f'not_found: no session within {session_date_tolerance.days}d '
-                        f'of {date_str}'
+                        f'of {date_str} (checked timestamp and label)'
                     )
                     return audit
                 if len(candidates) > 1:
@@ -335,6 +438,7 @@ def run_second_stage_with_inputs(
                     return audit
                 session = candidates[0]
                 audit['session_id'] = session.label  # record actual FW session label
+                audit['match_method'] = match_methods.get(session.id, 'unknown') + fmt_note
 
             elif session_match_mode == 'subject_only':
                 all_sessions = list(subject.sessions())
@@ -381,22 +485,26 @@ def run_second_stage_with_inputs(
                     )
                 )
 
-                # Write values: skip identifiers, skip empty, route site_raw to sub-dict
+                # Write values: skip identifiers, skip empty.
+                # Canonical fields go to top-level session.info.
+                # Non-canonical (site_raw pattern matches OR unknown) go to site_raw.*
+                # if store_site_raw is enabled; otherwise tracked in unknown_skipped.
                 site_raw_dict = dict(ses_dict.get(site_raw_prefix, {}))
                 for key, value in row.items():
                     if key in identifier_cols:
                         continue
                     if value is None or (isinstance(value, float) and pd.isna(value)) or str(value).strip() == '':
                         continue
-                    if key in site_raw_cols:
-                        # site_raw column: only write if store_site_raw is enabled
-                        # (key is guaranteed not in canonical_fields by the dedup guard above)
+                    if key in canonical_fields:
+                        ses_dict[key] = value
+                        audit['fields_written'].append(key)
+                    else:
+                        # Non-canonical: route to site_raw.* or track as skipped
                         if store_site_raw:
                             site_raw_dict[key] = value
                             audit['site_raw_written'].append(key)
-                    else:
-                        ses_dict[key] = value
-                        audit['fields_written'].append(key)
+                        else:
+                            audit['unknown_skipped'].append(key)
 
                 if site_raw_dict:
                     ses_dict[site_raw_prefix] = site_raw_dict
@@ -427,27 +535,39 @@ def run_second_stage_with_inputs(
             audit_rows.append(result)
 
     # Write reconciliation / audit CSV
+    run_timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
     audit_path = "/flywheel/v0/output/reconciliation_report.csv"
     audit_fieldnames = [
-        'subject_id', 'session_id', 'match_status',
+        'run_timestamp', 'subject_id', 'session_id', 'match_status', 'match_method',
         'fields_written', 'canonical_empty',
-        'canonical_not_in_csv', 'pre_existing', 'site_raw_written',
+        'pre_existing', 'site_raw_written', 'unknown_skipped',
     ]
     with open(audit_path, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=audit_fieldnames)
         writer.writeheader()
         for r in audit_rows:
             writer.writerow({
+                'run_timestamp':      run_timestamp,
                 'subject_id':         r['subject_id'],
                 'session_id':         r['session_id'],
                 'match_status':       r['match_status'],
+                'match_method':       r.get('match_method', ''),
                 'fields_written':     '; '.join(r['fields_written']),
                 'canonical_empty':    '; '.join(r['canonical_empty']),
-                'canonical_not_in_csv': '; '.join(canonical_not_in_csv),
                 'pre_existing':       '; '.join(r['pre_existing']),
                 'site_raw_written':   '; '.join(r['site_raw_written']),
+                'unknown_skipped':    '; '.join(r.get('unknown_skipped', [])),
             })
     print(f"Reconciliation report written to {audit_path}")
+
+    # Write canonical fields absent from the uploaded CSV as a separate summary
+    missing_path = "/flywheel/v0/output/canonical_not_in_csv.csv"
+    with open(missing_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['canonical_field'])
+        for field in canonical_not_in_csv:
+            writer.writerow([field])
+    print(f"Canonical fields not in CSV written to {missing_path} ({len(canonical_not_in_csv)} fields)")
     print("All sessions updated from CSV.")
 
     return 0  # all is well

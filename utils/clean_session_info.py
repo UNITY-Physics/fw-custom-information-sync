@@ -57,23 +57,23 @@ def clean_session(ses_dict):
                 ses_dict[new_key] = None
             
             ses_dict.pop(old_key, None)
-            print('Popping old key...',old_key)
+            log.debug('Popping old key... %s', old_key)
             updated = True
         
         else:
-            print(f"No {old_key} found in session.")
+            log.debug("No %s found in session.", old_key)
 
     for key in delete_keys + list(old_key_new_key.keys()):
        
         ses_dict.pop(key,None)
-        print('Deleting key...',key)
+        log.debug('Deleting key... %s', key)
 
     
     defaults_template.update(old_default_template_dict)
     for key in [key for key in ses_dict if key in defaults_template]:
         
         if ses_dict[key] == defaults_template[key]:
-            print(f"Setting {key} to None...")
+            log.debug("Setting %s to None...", key)
             ses_dict[key] = None
   
     
