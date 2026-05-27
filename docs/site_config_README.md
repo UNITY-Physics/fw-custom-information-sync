@@ -60,21 +60,49 @@ The gear needs to know which row in your spreadsheet corresponds to which MRI se
 session_match: "date"
 ```
 
-Three options:
+Choose one mode using this quick guide:
 
-| Value | When to use |
-|---|---|
-| `"date"` | Your spreadsheet has a scan date column — this is the recommended option |
-| `"label"` | Your session labels in Flywheel exactly match a column in your spreadsheet |
-| `"subject_only"` | Each participant has only one session (no date or label column needed) |
+1. If each participant has exactly one session in Flywheel, use `"subject_only"`.
+2. If participants can have multiple sessions and your CSV has a scan date column, use `"date"` (recommended).
+3. If participants can have multiple sessions but you do not have reliable scan dates, use `"label"`.
 
-**If using `"date"`**, also fill in these three lines:
+Required fields by mode:
+
+| `session_match` value | Required CSV columns | Extra site config needed |
+|---|---|---|
+| `"date"` | `subject_id` (via `id_field`) + your date column | `session_date_field`, `session_date_format`, `session_date_tolerance_days` |
+| `"label"` | `subject_id` (via `id_field`) + `session_id` | none |
+| `"subject_only"` | `subject_id` (via `id_field`) only | none |
+
+Examples:
+
+**A) Date matching (recommended when multiple sessions exist):**
 
 ```yaml
-session_date_field: scan_date       # the column name in your CSV that holds the date
-session_date_format: "%d/%m/%Y"     # the date format in that column (see below)
-session_date_tolerance_days: 1      # how many days' difference is still considered a match
+id_field: "participant_id"
+session_match: "date"
+session_date_field: "scan_date"
+session_date_format: "%d/%m/%Y"
+session_date_tolerance_days: 1
 ```
+
+**B) Label matching (use when you have a `session_id` column):**
+
+```yaml
+id_field: "participant_id"
+session_match: "label"
+```
+
+Your CSV must contain a `session_id` column in this mode.
+
+**C) Subject-only matching (use only when each subject has one session):**
+
+```yaml
+id_field: "participant_id"
+session_match: "subject_only"
+```
+
+If a subject has more than one session in Flywheel, that row will be marked as `ambiguous` and skipped.
 
 #### Date format codes
 
