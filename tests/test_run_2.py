@@ -11,7 +11,20 @@ import pandas as pd
 from datetime import datetime, timedelta, date
 from pathlib import Path
 
-from app.run_2 import apply_site_config, cast_metadata_fields, _parse_csv_date, _parse_label_as_date
+from app.run_2 import (
+    apply_site_config,
+    cast_metadata_fields,
+    _parse_csv_date,
+    _parse_label_as_date,
+    _derive_row_status,
+    _build_source_row_uid,
+    _derive_non_imaging_label,
+    _to_bool_with_truthy,
+    _is_non_imaging_session,
+    _find_non_imaging_session_by_uid,
+    _find_non_imaging_session_by_label,
+    _id_to_str,
+)
 
 # ---------------------------------------------------------------------------
 # Fixture data
@@ -267,6 +280,27 @@ class TestCastMetadataFields:
         assert result["subject_id"].iloc[0] == "123"
         assert result["session_id"].iloc[0] == "456"
 
+    def test_numeric_subject_id_strips_dot_zero(self):
+        # Pandas reads integer-only CSV columns as float: 1227 → 1227.0
+        # str(1227.0) = "1227.0" which won't match a Flywheel label of "1227"
+        df = pd.DataFrame({"subject_id": [1227.0, 1213.0]})
+        result = cast_metadata_fields(df.copy(), MINIMAL_TEMPLATE)
+        assert result["subject_id"].iloc[0] == "1227"
+        assert result["subject_id"].iloc[1] == "1213"
+
+    def test_id_to_str_whole_float(self):
+        assert _id_to_str(1227.0) == "1227"
+
+    def test_id_to_str_string_with_dot_zero(self):
+        assert _id_to_str("1227.0") == "1227"
+
+    def test_id_to_str_plain_string(self):
+        assert _id_to_str("ABC-123") == "ABC-123"
+
+    def test_id_to_str_nan_returns_none(self):
+        import math
+        assert _id_to_str(float("nan")) is None
+
     def test_unknown_column_not_in_template_survives(self):
         df = pd.DataFrame({"unknown_col": ["foo"], "subject_id": ["a"]})
         result = cast_metadata_fields(df.copy(), MINIMAL_TEMPLATE)
@@ -326,6 +360,12 @@ class TestParseCsvDate:
         assert d == date(2026, 3, 30)
         assert fmt == "%Y-%m-%d"
 
+    def test_flywheel_dicom_timestamp_fallback(self):
+        # Flywheel DICOM-style timestamp in CSV (mixed with plain dates in same column)
+        d, fmt = _parse_csv_date("2026-03-27_14_29_56", "%Y-%m-%d")
+        assert d == date(2026, 3, 27)
+        assert fmt == "%Y-%m-%d_%H_%M_%S"
+
     def test_unrecognised_returns_none(self):
         d, fmt = _parse_csv_date("not-a-date", "%d/%m/%Y")
         assert d is None
@@ -355,3 +395,133 @@ class TestParseLabelAsDate:
     def test_unparseable_returns_none(self):
         d = _parse_label_as_date("not-a-date")
         assert d is None
+
+
+class TestDeriveRowStatus:
+
+    def test_updated_maps_to_imaging_matched(self):
+        assert _derive_row_status("updated") == "imaging_matched"
+
+    def test_ambiguous_maps_to_imaging_ambiguous(self):
+        assert _derive_row_status("ambiguous: 2 sessions") == "imaging_ambiguous"
+
+    def test_not_found_maps_to_imaging_not_found_by_default(self):
+        assert _derive_row_status("not_found: no session") == "imaging_not_found"
+
+    def test_not_found_maps_to_non_imaging_ineligible_when_flag_on(self):
+        assert (
+            _derive_row_status(
+                "not_found: no session", additional_non_imaging_sessions=True
+            )
+            == "non_imaging_ineligible"
+        )
+
+    def test_error_maps_to_invalid_row(self):
+        assert _derive_row_status("error: bad date") == "invalid_row"
+
+    def test_non_imaging_created_passthrough(self):
+        assert _derive_row_status("non_imaging_created") == "non_imaging_created"
+
+    def test_non_imaging_updated_passthrough(self):
+        assert _derive_row_status("non_imaging_updated") == "non_imaging_updated"
+
+    def test_non_imaging_blocked_passthrough(self):
+        assert (
+            _derive_row_status("non_imaging_blocked_near_imaging")
+            == "non_imaging_blocked_near_imaging"
+        )
+
+
+class TestNonImagingHelpers:
+
+    def test_source_row_uid_is_deterministic(self):
+        uid_a = _build_source_row_uid("proj", "sub-01", "2026-01-15", "home_visit")
+        uid_b = _build_source_row_uid("proj", "sub-01", "2026-01-15", "home_visit")
+        assert uid_a == uid_b
+        assert len(uid_a) == 16
+
+    def test_derive_non_imaging_label_handles_collision(self):
+        label = _derive_non_imaging_label(
+            "NI",
+            "Home Visit",
+            date(2026, 1, 15),
+            {"NI-home-visit-20260115"},
+        )
+        assert label == "NI-home-visit-20260115-2"
+
+    def test_derive_non_imaging_label_uses_unknown_token(self):
+        label = _derive_non_imaging_label("NI", "", date(2026, 1, 15), set())
+        assert label == "NI-unknown-20260115"
+
+    def test_to_bool_with_truthy_values(self):
+        assert _to_bool_with_truthy("YES", ["yes", "1"]) is True
+        assert _to_bool_with_truthy("no", ["yes", "1"]) is False
+
+    def test_is_non_imaging_session_from_info_marker(self):
+        class FakeSession:
+            info = {"session_kind": "non_imaging"}
+
+        assert _is_non_imaging_session(FakeSession()) is True
+
+    def test_find_non_imaging_session_by_uid(self):
+        class FakeSession:
+            def __init__(self, kind, uid):
+                self.info = {"session_kind": kind, "source_row_uid": uid}
+
+        sessions = [
+            FakeSession("imaging", "aaa"),
+            FakeSession("non_imaging", "bbb"),
+        ]
+        found = _find_non_imaging_session_by_uid(sessions, "bbb")
+        assert found is sessions[1]
+
+    def test_find_non_imaging_session_by_uid_ignores_imaging(self):
+        class FakeSession:
+            def __init__(self, kind, uid):
+                self.info = {"session_kind": kind, "source_row_uid": uid}
+
+        sessions = [FakeSession("imaging", "match-me")]
+        found = _find_non_imaging_session_by_uid(sessions, "match-me")
+        assert found is None
+
+    def test_find_non_imaging_session_by_label_matches_base(self):
+        class FakeSession:
+            def __init__(self, kind, label):
+                self.info = {"session_kind": kind}
+                self.label = label
+
+        sessions = [
+            FakeSession("imaging", "2026-03-27_14_29_56"),
+            FakeSession("non_imaging", "NI-unknown-20260401"),
+        ]
+        found = _find_non_imaging_session_by_label(
+            sessions, "NI", "", date(2026, 4, 1)
+        )
+        assert found is sessions[1]
+
+    def test_find_non_imaging_session_by_label_matches_suffixed(self):
+        """Matches NI-unknown-20260401-2 when base already existed from a prior run."""
+        class FakeSession:
+            def __init__(self, kind, label):
+                self.info = {"session_kind": kind}
+                self.label = label
+
+        sessions = [
+            FakeSession("non_imaging", "NI-unknown-20260401-2"),
+        ]
+        found = _find_non_imaging_session_by_label(
+            sessions, "NI", "", date(2026, 4, 1)
+        )
+        assert found is sessions[0]
+
+    def test_find_non_imaging_session_by_label_ignores_imaging(self):
+        class FakeSession:
+            def __init__(self, kind, label):
+                self.info = {"session_kind": kind}
+                self.label = label
+
+        sessions = [FakeSession("imaging", "NI-unknown-20260401")]
+        found = _find_non_imaging_session_by_label(
+            sessions, "NI", "", date(2026, 4, 1)
+        )
+        assert found is None

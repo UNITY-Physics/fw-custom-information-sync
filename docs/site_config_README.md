@@ -196,6 +196,70 @@ drop_columns:
 
 Save the file as `site_config.yaml` (not `.txt`). Upload it as a gear input alongside your data CSV when running the gear.
 
+### Optional — Enable non-imaging session creation
+
+Some studies collect visits that do not correspond to MRI scan sessions. To preserve these rows safely, the gear now supports an optional non-imaging path.
+
+1. Enable gear config `additional_non_imaging_sessions`.
+2. In `site_config.yaml`, set:
+
+```yaml
+non_imaging_date_field: "visit_date"
+non_imaging_date_format: "%d/%m/%Y"
+non_imaging_visit_type_field: "visit_type"
+non_imaging_visit_type_allowlist:
+  - "home_visit"
+  - "clinic_visit"
+non_imaging_visit_marker_fields:
+  - "non_imaging_visit_flag"
+```
+
+Safety behavior:
+
+1. If a row can be matched to an imaging session, imaging sync is used.
+2. If no imaging match is found, the gear may create/update a non-imaging session.
+3. Creation is blocked when the row date is very close to an imaging date (guard window), unless explicitly overridden by force-create settings.
+4. Re-runs are idempotent: the same row updates the same non-imaging session via a deterministic row UID.
+
+### Staging validation checklist
+
+Before production use, run this checklist on a staging Flywheel project:
+
+1. Start with `dry_run: true` and `additional_non_imaging_sessions: true`.
+2. Upload a CSV that includes:
+3. One row that should match an imaging session.
+4. One row with a valid non-imaging visit date that should create a non-imaging session.
+5. One row within the near-imaging guard window that should be blocked.
+6. One malformed date row that should fail parsing.
+7. Confirm `reconciliation_report.csv` contains expected `row_status` values:
+8. `imaging_matched`
+9. `non_imaging_created` (in dry-run this is simulated in report only)
+10. `non_imaging_blocked_near_imaging`
+11. `invalid_row`
+12. Re-run with `dry_run: false` using the same CSV.
+13. Confirm non-imaging sessions are created only for expected rows.
+14. Re-run the same file a third time and verify idempotency:
+15. No duplicate non-imaging sessions should appear.
+16. Existing non-imaging sessions should show `non_imaging_updated`.
+
+### Recommended staging test scenarios
+
+Use these focused scenarios when tuning site config rules:
+
+1. Visit marker required:
+2. Set `non_imaging_require_visit_marker: true` with no marker fields populated.
+3. Confirm rows are rejected with `reason_code = no_visit_marker`.
+4. Visit allowlist enforcement:
+5. Provide `non_imaging_visit_type_allowlist` and include one out-of-list visit type.
+6. Confirm row is rejected with `reason_code = visit_type_not_allowed`.
+7. Near-imaging override behavior:
+8. Set `non_imaging_allow_within_imaging_window_if_explicit: true`.
+9. Provide force-create marker for a near-imaging row.
+10. Confirm row is allowed only when explicit override value is present.
+11. Field routing filters:
+12. Set `non_imaging_include_fields_regex` and `non_imaging_exclude_fields_regex`.
+13. Confirm only intended fields are written onto non-imaging sessions.
+
 ---
 
 ## Outputs from the gear

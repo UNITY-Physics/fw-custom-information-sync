@@ -23,7 +23,7 @@ id_field: "participant_id"
 #   "label"        -> exact match on Flywheel session label (v1 default)
 #   "date"         -> match on scan date (requires session_date_field below)
 #   "subject_only" -> use when every subject has exactly one session
-session_match: "label"
+session_match: "date"
 
 # Required when session_match is "date":
 session_date_field: null          # your CSV column name for the scan date
@@ -32,14 +32,12 @@ session_date_tolerance_days: 0    # allow +/- N days when matching dates
 
 # --- Variable mapping ---
 
-# Maps canonical field names to either:
-#   - a column name string  -> gear reads values from that CSV column
-#   - a scalar constant     -> gear writes that value for every session
+# Maps a canonical field name to the name of the column in your CSV that holds
+# its values.  Use this when your site uses a different column name for the same
+# data (e.g. your file calls it "visit" but the canonical name is "studyTimepoint").
 #
-# All canonical fields are listed below as commented-out entries.
-# Uncomment and fill in any field whose column name in your CSV differs
-# from the canonical name. Fields already named canonically in your CSV
-# or covered by old_new_harmonization.yaml do NOT need to be listed here.
+# Fields already named canonically in your CSV do NOT need an entry here.
+# Fields covered by old_new_harmonization.yaml are also handled automatically.
 #
 # Type key:  str=text  float=number  bool=true/false  list=multi-value
 
@@ -48,16 +46,13 @@ variable_map:
   # === Demographics ===
 
   # --- Study / cohort identifiers ---
-  # CohortName: "your_column"                          # str
-  # CohortLocation_city: "your_column"                 # str  (or constant e.g. "Nairobi")
-  # CohortLocation_country: "your_column"              # str  (or constant e.g. "Kenya")
-  # SubCohort_Group: "your_column"                     # str
-  # StudyID: "your_column"                             # str
   # UniqueStudyID: "your_column"                       # str
+  # SubCohort_Group: "your_column"                     # str  (if values vary per row)
+  # CohortLocation_country: "your_column"              # str  (if values vary per row; use constant_map if same for all)
+  # CohortLocation_city: "your_column"                 # str  (if values vary per row; use constant_map if same for all)
 
   # --- Session / MRI metadata ---
-  # MRI_fieldStrength: "your_column"                   # float
-  # studyTimepoint: "your_column"                      # str  (e.g. "visit")
+  # studyTimepoint: "your_column"                      # str  (e.g. rename "visit" → studyTimepoint)
   # mriCollectedAtTimepoint: "your_column"             # bool
 
   # --- Timepoint anthropometrics ---
@@ -192,6 +187,26 @@ variable_map:
   # EverStunted: "your_column"                         # bool
   # EverWasted: "your_column"                          # bool
 
+# --- Constant values ---
+
+# Sets the same value for every session in this site's data.
+# Use for fields that do not vary per participant: cohort name, country, city,
+# scanner field strength, etc.
+# These are written to every session regardless of what the CSV contains.
+#
+# Uncomment and fill in any that apply to your site.
+
+constant_map:
+
+  # --- Study / cohort identifiers ---
+  # CohortName: "YourCohortName"                       # str  e.g. "LONISAC"
+  # CohortLocation_country: "YourCountry"              # str  e.g. "South Africa"
+  # CohortLocation_city: "YourCity"                    # str  e.g. "Cape Town"
+  # SubCohort_Group: "YourGroup"                       # str  (if all rows share a sub-group)
+
+  # --- MRI scanner ---
+  # MRI_fieldStrength: 3.0                             # float  e.g. 1.5 or 3.0
+
 # --- Value transforms ---
 
 # Remap raw cell values in a column to canonical controlled-vocabulary values.
@@ -221,6 +236,17 @@ value_map:
 #   gestational age  -> weeks
 #   age              -> days
 #
+
+  # childBirthWeight_kgs:
+  #   source_unit: "lbs"
+  #   target_unit: "kg"
+  #   conversion: "multiply_by_0.453592"
+  # childBirthLength_cm:
+  #   source_unit: "inches"
+  #   target_unit: "cm"
+  #   conversion: "multiply_by_2.54"
+
+
 # IMPORTANT: use block style (indented lines), NOT flow style ({...}).
 unit_map:
 
@@ -243,3 +269,38 @@ site_raw_pattern: null
 # Prefix used when storing site_raw fields in Flywheel custom info.
 # Fields are stored as:  custom_info["site_raw"]["<column_name>"]
 site_raw_prefix: "site_raw"
+
+# --- Optional non-imaging session controls ---
+
+# Use these keys if your CSV includes visits that are not imaging sessions and
+# you want the gear to create/update non-imaging sessions for those rows.
+
+# Date column used for non-imaging candidate rows.
+# If null, the gear falls back to session_date_field above.
+non_imaging_date_field: null
+
+# Date format used for non_imaging_date_field.
+non_imaging_date_format: "%Y-%m-%d"
+
+# Optional column used to classify visit type (example: "home_visit", "clinic").
+non_imaging_visit_type_field: null
+
+# Optional allowlist for visit-type values eligible for non-imaging creation.
+# Leave empty to allow any visit type.
+non_imaging_visit_type_allowlist: []
+
+# Optional list of marker fields that indicate a row is a true non-imaging visit.
+non_imaging_visit_marker_fields: []
+
+# Optional explicit create override field (example column values yes/true/1).
+non_imaging_force_create_field: null
+non_imaging_force_create_values:
+  - "yes"
+  - "true"
+  - "1"
+
+# Optional regex filters for what fields are written onto non-imaging sessions.
+# If include regex is set, only matching fields are considered.
+# Exclude regex is applied after include filtering.
+non_imaging_include_fields_regex: null
+non_imaging_exclude_fields_regex: null

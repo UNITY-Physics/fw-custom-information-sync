@@ -17,6 +17,31 @@
       "default": false,
       "description": "When enabled, the gear will write a copy of site_config_template.yaml to the output folder. Download and complete this file to map your site's column names to canonical field names before running with a session_info CSV.",
       "type": "boolean"
+    },
+    "additional_non_imaging_sessions": {
+      "default": false,
+      "description": "When enabled, rows that do not match imaging sessions can be written to non-imaging sessions using guarded creation/upsert logic.",
+      "type": "boolean"
+    },
+    "non_imaging_label_prefix": {
+      "default": "NI",
+      "description": "Prefix used when creating non-imaging session labels (example: NI-visit-20260115).",
+      "type": "string"
+    },
+    "non_imaging_block_if_near_imaging_days": {
+      "default": 1,
+      "description": "Block non-imaging session creation when the row date is within this many days of an imaging session, unless explicitly overridden.",
+      "type": "integer"
+    },
+    "non_imaging_require_visit_marker": {
+      "default": true,
+      "description": "Require visit marker evidence (visit type/marker fields/force-create) before creating non-imaging sessions.",
+      "type": "boolean"
+    },
+    "non_imaging_allow_within_imaging_window_if_explicit": {
+      "default": false,
+      "description": "Allow non-imaging creation inside the near-imaging block window only when the row has an explicit force-create marker.",
+      "type": "boolean"
     }
   },
   "custom": {
@@ -26,7 +51,7 @@
     },
     "gear-builder": {
       "category": "analysis",
-      "image": "flywheel/custom-information-sync:0.1.18"
+      "image": "flywheel/custom-information-sync:0.1.24"
     }
   },
   "description": "This gear offers a way to modify custom information in session containers synced to a csv. Running custom-information-sync as a project-level analysis will generate a CSV file that will be populated with a unique list of subject, session labels along with existing custom information. This CSV file needs to be downloaded and modified to provide new custom information for any missing sessions. Edited CSV files are then uploaded to the project as an attachment and provided as input to a run of this same gear to modify session custom info. For more information, please see the README in the source repository.",
@@ -77,5 +102,5 @@
   "name": "custom-information-sync",
   "source": "",
   "url": "",
-  "version": "0.1.18"
+  "version": "0.1.24"
 }

@@ -24,7 +24,14 @@ def main(context: GearToolkitContext) -> None:  # pragma: no cover
 
     api_key, inputs_provided, df, site_config_path = load_inputs(context)
 
-    e_code = run(context, inputs_provided, df, api_key, site_config_path)
+    e_code = run(
+        context,
+        inputs_provided,
+        df,
+        api_key,
+        site_config_path,
+        dry_run=dry_run,
+    )
 
     sys.exit(e_code)
 

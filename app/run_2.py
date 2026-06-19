@@ -6,6 +6,7 @@ import csv
 import ast
 import yaml
 import sys
+import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
 from utils.clean_session_info import clean_session
@@ -33,6 +34,136 @@ _LABEL_DATE_FORMATS = [
     '%d-%m-%Y',           # 01-06-2025
     '%d-%m-%y',           # 01-06-25
 ]
+
+
+def _session_date_for_matching(session_obj, primary_format=None):
+    """Return the best available date for a Flywheel session.
+
+    Priority:
+    1) session timestamp date
+    2) session label parsed as date using configured + fallback formats
+    """
+    if session_obj.timestamp:
+        try:
+            return session_obj.timestamp.date(), 'timestamp'
+        except Exception:
+            pass
+
+    label_date = _parse_label_as_date(session_obj.label, primary_format)
+    if label_date:
+        return label_date, 'label'
+
+    return None, None
+
+
+def _derive_row_status(match_status, additional_non_imaging_sessions=False):
+    """Map legacy match_status text to a stable row_status enum."""
+    if match_status == 'non_imaging_created':
+        return 'non_imaging_created'
+    if match_status == 'non_imaging_updated':
+        return 'non_imaging_updated'
+    if match_status == 'non_imaging_blocked_near_imaging':
+        return 'non_imaging_blocked_near_imaging'
+    if match_status == 'updated':
+        return 'imaging_matched'
+    if isinstance(match_status, str) and match_status.startswith('ambiguous:'):
+        return 'imaging_ambiguous'
+    if isinstance(match_status, str) and match_status.startswith('not_found'):
+        if additional_non_imaging_sessions:
+            return 'non_imaging_ineligible'
+        return 'imaging_not_found'
+    if isinstance(match_status, str) and match_status.startswith('error:'):
+        return 'invalid_row'
+    return 'invalid_row'
+
+
+def _normalize_str(value):
+    if value is None:
+        return ''
+    return str(value).strip()
+
+
+def _sanitize_label_token(value, default='unknown'):
+    token = _normalize_str(value).lower()
+    token = re.sub(r'[^a-z0-9]+', '-', token).strip('-')
+    return token or default
+
+
+def _to_bool_with_truthy(value, truthy_values=None):
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    norm = _normalize_str(value).lower()
+    truthy = {'1', 'true', 'yes', 'y'}
+    if truthy_values:
+        truthy = {str(v).strip().lower() for v in truthy_values}
+    return norm in truthy
+
+
+def _build_source_row_uid(project_label, subject_id, visit_date_iso, visit_type):
+    """Build deterministic row UID for idempotent non-imaging upserts."""
+    payload = '|'.join([
+        _normalize_str(project_label),
+        _normalize_str(subject_id),
+        _normalize_str(visit_date_iso),
+        _normalize_str(visit_type),
+    ])
+    return hashlib.sha1(payload.encode('utf-8')).hexdigest()[:16]
+
+
+def _is_non_imaging_session(session_obj):
+    """Detect whether a session is tagged as non-imaging."""
+    try:
+        info = session_obj.info or {}
+    except Exception:
+        info = {}
+    return _normalize_str(info.get('session_kind')).lower() == 'non_imaging'
+
+
+def _find_non_imaging_session_by_uid(sessions, source_row_uid):
+    """Return existing non-imaging session matching source_row_uid if present."""
+    for session in sessions:
+        if not _is_non_imaging_session(session):
+            continue
+        info = session.info or {}
+        if _normalize_str(info.get('source_row_uid')) == source_row_uid:
+            return session
+    return None
+
+
+def _find_non_imaging_session_by_label(sessions, prefix, visit_type, visit_date):
+    """Fallback dedup: find an existing NI session by label pattern.
+
+    Used when source_row_uid was not written in a prior run (e.g. sessions created
+    before UID tracking was implemented).  Matches the base label and any
+    collision-suffixed variants (NI-visit-20260401, NI-visit-20260401-2, …).
+    After a match is updated, write_row_values_to_session will stamp the UID so
+    future runs use the faster UID path instead.
+    """
+    date_token = visit_date.strftime('%Y%m%d')
+    visit_token = _sanitize_label_token(visit_type)
+    base = f"{prefix}-{visit_token}-{date_token}"
+    pattern = re.compile(rf'^{re.escape(base)}(-\d+)?$')
+    for session in sessions:
+        if not _is_non_imaging_session(session):
+            continue
+        if pattern.match(session.label or ''):
+            return session
+    return None
+
+
+def _derive_non_imaging_label(prefix, visit_type, visit_date, existing_labels):
+    """Create a deterministic, collision-safe non-imaging session label."""
+    date_token = visit_date.strftime('%Y%m%d')
+    visit_token = _sanitize_label_token(visit_type)
+    base = f"{prefix}-{visit_token}-{date_token}"
+    if base not in existing_labels:
+        return base
+    counter = 2
+    while f"{base}-{counter}" in existing_labels:
+        counter += 1
+    return f"{base}-{counter}"
 
 def _parse_label_as_date(label, primary_format=None):
     """Try to parse a session label string as a date.
@@ -67,6 +198,7 @@ def _parse_csv_date(date_str, primary_format):
         fallbacks.append(two_digit)
     # Additional common formats
     for fmt in [
+        '%Y-%m-%d_%H_%M_%S',  # Flywheel DICOM label: 2026-03-30_15_41_04
         '%Y-%m-%d', '%d/%m/%Y', '%d/%m/%y',
         '%m/%d/%Y', '%m/%d/%y', '%d-%m-%Y', '%d-%m-%y', '%Y/%m/%d',
     ]:
@@ -138,11 +270,30 @@ def parse_value(val, target_type):
     except (ValueError, TypeError):
         return None
 
+def _id_to_str(x):
+    """Convert an identifier cell to a clean string.
+
+    Pandas reads integer-valued CSV columns as float (e.g. 1227 → 1227.0).
+    str(1227.0) would give "1227.0", which won't match a Flywheel label of "1227".
+    This helper strips the spurious .0 suffix for whole-number values.
+    """
+    if pd.isna(x):
+        return None
+    s = str(x).strip()
+    try:
+        f = float(s)
+        if f == int(f):
+            return str(int(f))
+    except (ValueError, OverflowError):
+        pass
+    return s
+
+
 def cast_metadata_fields(df, template):
     identifier_columns = {'group_id', 'project_id', 'subject_id', 'session_id'}
     for col in df.columns:
         if col in identifier_columns:
-            df[col] = df[col].apply(lambda x: None if pd.isna(x) else str(x).strip())
+            df[col] = df[col].apply(_id_to_str)
             continue
         if col in template:
             example = template[col]
@@ -170,9 +321,9 @@ def cast_metadata_fields(df, template):
 def apply_site_config(df, site_config):
     """Apply site config transformations to a DataFrame before canonical matching.
 
-    Applies (in order): drop_columns, id_field rename, variable_map (column rename or
-    constant injection), value_map (cell value remap), unit_map (numeric conversion),
-    and identifies site_raw columns via site_raw_pattern regex.
+    Applies (in order): drop_columns, id_field rename, variable_map (column rename),
+    constant_map (site-level constant injection), value_map (cell value remap),
+    unit_map (numeric conversion), and identifies site_raw columns via site_raw_pattern regex.
 
     Args:
         df (pd.DataFrame): raw input CSV as DataFrame
@@ -194,17 +345,26 @@ def apply_site_config(df, site_config):
     if id_field and id_field in df.columns and 'subject_id' not in df.columns:
         df = df.rename(columns={id_field: 'subject_id'})
 
-    # 3. variable_map: canonical_field -> site_column_or_constant
+    # 3. variable_map: canonical_field -> site_column  (column rename only)
+    # Constants belonging here for backward compatibility are also accepted.
     variable_map = site_config.get('variable_map') or {}
     for canonical, source in variable_map.items():
         if source is None:
             continue
         if isinstance(source, str) and source in df.columns:
-            # rename the site column to the canonical name
             df = df.rename(columns={source: canonical})
         else:
-            # scalar constant: add a column with the same value for every row
+            # legacy constant fallback — prefer constant_map for new configs
             df[canonical] = source
+
+    # 3b. constant_map: canonical_field -> scalar  (same value for every row)
+    # Use for site-level fields that don't vary per participant: country, city,
+    # scanner field strength, cohort name, etc.
+    constant_map = site_config.get('constant_map') or {}
+    for canonical, value in constant_map.items():
+        if value is None:
+            continue
+        df[canonical] = value
 
     # 4. value_map: remap raw cell values to canonical controlled-vocabulary values
     value_map = site_config.get('value_map') or {}
@@ -242,6 +402,11 @@ def apply_site_config(df, site_config):
 
 def run_second_stage_with_inputs(
     api_key, run_level, df, site_config_path=None, store_site_raw=False,
+    dry_run=False, additional_non_imaging_sessions=False,
+    non_imaging_label_prefix='NI',
+    non_imaging_block_if_near_imaging_days=1,
+    non_imaging_require_visit_marker=True,
+    non_imaging_allow_within_imaging_window_if_explicit=False,
     context_group=None, context_project_label=None,
 ):
     """Since input csv files were provided, update labels where new ones were given.
@@ -251,6 +416,16 @@ def run_second_stage_with_inputs(
         run_level (str): the level at which the gear is running: 'project' or 'subject'
         df (str | Path): path to the session_info CSV
         site_config_path (str | Path | None): path to the site config YAML, or None for v1 fallback
+        dry_run (bool): when True, do not write any session info updates
+        additional_non_imaging_sessions (bool): enable non-imaging upsert flow for
+            unmatched rows after imaging matching fails.
+        non_imaging_label_prefix (str): prefix used for created non-imaging labels.
+        non_imaging_block_if_near_imaging_days (int): block non-imaging creation when
+            candidate date is within this many days of an imaging session.
+        non_imaging_require_visit_marker (bool): require visit marker evidence before
+            non-imaging creation is allowed.
+        non_imaging_allow_within_imaging_window_if_explicit (bool): allow creation
+            within the near-imaging window only when explicit force-create is set.
         context_group (str): Flywheel group label from the gear's destination hierarchy
         context_project_label (str): Flywheel project label from the gear's destination hierarchy
 
@@ -321,6 +496,29 @@ def run_second_stage_with_inputs(
         days=int((site_config or {}).get('session_date_tolerance_days', 0))
     )
 
+    # Non-imaging settings (site-config keys override gear-level defaults)
+    non_img_date_field = (site_config or {}).get('non_imaging_date_field') or session_date_field
+    non_img_date_format = (site_config or {}).get('non_imaging_date_format', session_date_format)
+    non_img_visit_type_field = (site_config or {}).get('non_imaging_visit_type_field')
+    non_img_visit_type_allowlist = [
+        _normalize_str(v).lower()
+        for v in ((site_config or {}).get('non_imaging_visit_type_allowlist') or [])
+        if _normalize_str(v)
+    ]
+    non_img_marker_fields = [
+        _normalize_str(v)
+        for v in ((site_config or {}).get('non_imaging_visit_marker_fields') or [])
+        if _normalize_str(v)
+    ]
+    non_img_force_field = (site_config or {}).get('non_imaging_force_create_field')
+    non_img_force_values = (site_config or {}).get(
+        'non_imaging_force_create_values', ['yes', 'true', '1']
+    )
+    non_img_include_regex = (site_config or {}).get('non_imaging_include_fields_regex')
+    non_img_exclude_regex = (site_config or {}).get('non_imaging_exclude_fields_regex')
+    non_img_include_pattern = re.compile(non_img_include_regex) if non_img_include_regex else None
+    non_img_exclude_pattern = re.compile(non_img_exclude_regex) if non_img_exclude_regex else None
+
     # Rename legacy columns
     harmonization_path = Path("/flywheel/v0/utils/old_new_harmonization.yaml")
     if harmonization_path.exists():
@@ -353,25 +551,122 @@ def run_second_stage_with_inputs(
     # Determine which canonical fields are absent from the CSV entirely (same for all rows)
     canonical_not_in_csv = sorted(canonical_fields - set(csv_data.columns))
 
-    def process_row(row, replace):
+    def process_row(row_idx, row, replace):
+        def finalize_audit(a):
+            if not a.get('row_status'):
+                a['row_status'] = _derive_row_status(
+                    a['match_status'], additional_non_imaging_sessions
+                )
+            if a['row_status'] == 'imaging_matched' and not a['reason_code']:
+                a['reason_code'] = 'ok'
+            if a['row_status'] in {'non_imaging_created', 'non_imaging_updated'} and not a['reason_code']:
+                a['reason_code'] = 'ok'
+            return a
+
+        def non_imaging_field_allowed(field_name):
+            if field_name in identifier_cols:
+                return False
+            if non_img_include_pattern and not non_img_include_pattern.search(field_name):
+                return False
+            if non_img_exclude_pattern and non_img_exclude_pattern.search(field_name):
+                return False
+            return True
+
+        def write_row_values_to_session(target_session, is_non_imaging=False):
+            target_session = target_session.reload()
+            ses_dict = target_session.info
+            ses_dict = clean_session(ses_dict)
+            if not dry_run:
+                target_session.replace_info(ses_dict)
+                target_session = target_session.reload()
+                ses_dict = target_session.info
+
+            audit['pre_existing'] = sorted(
+                k for k in canonical_fields if k in ses_dict and ses_dict[k] is not None
+            )
+
+            audit['canonical_empty'] = sorted(
+                k for k in canonical_fields
+                if k in row
+                and (
+                    row[k] is None
+                    or (isinstance(row[k], float) and pd.isna(row[k]))
+                    or str(row[k]).strip() == ''
+                )
+            )
+
+            site_raw_dict = dict(ses_dict.get(site_raw_prefix, {}))
+            for key, value in row.items():
+                if key in identifier_cols:
+                    continue
+                if is_non_imaging and not non_imaging_field_allowed(key):
+                    continue
+                if value is None or (isinstance(value, float) and pd.isna(value)) or str(value).strip() == '':
+                    continue
+                if key in canonical_fields:
+                    ses_dict[key] = value
+                    audit['fields_written'].append(key)
+                else:
+                    if store_site_raw:
+                        site_raw_dict[key] = value
+                        audit['site_raw_written'].append(key)
+                    else:
+                        audit['unknown_skipped'].append(key)
+
+            if is_non_imaging:
+                ses_dict['session_kind'] = 'non_imaging'
+                ses_dict['source_system'] = 'custom_information_sync'
+                if audit.get('source_row_uid'):
+                    ses_dict['source_row_uid'] = audit['source_row_uid']
+                if audit.get('source_date_normalized'):
+                    ses_dict['visit_date_normalized'] = audit['source_date_normalized']
+
+            if site_raw_dict:
+                ses_dict[site_raw_prefix] = site_raw_dict
+
+            audit['fields_written_count'] = len(audit['fields_written'])
+
+            if not dry_run:
+                if replace:
+                    target_session.replace_info(ses_dict)
+                else:
+                    target_session.update_info(ses_dict)
+
         # Exclude identifier and date columns from field writes
         identifier_cols = {'group_id', 'project_id', 'subject_id', 'session_id'}
         if session_date_field:
             identifier_cols.add(session_date_field)
+        if non_img_date_field:
+            identifier_cols.add(non_img_date_field)
 
         subject_id = row.get('subject_id')
         session_id = row.get('session_id')  # may be None in date/subject_only modes
 
         audit = {
+            'row_index': row_idx,
             'subject_id': subject_id,
             'session_id': session_id,
             'match_status': 'not_found',
             'match_method': '',
+            'row_status': '',
+            'reason_code': '',
+            'source_date_raw': str(row.get(session_date_field, '')).strip() if session_date_field else '',
+            'source_date_normalized': '',
+            'candidate_type': 'imaging',
+            'matched_session_label': '',
+            'matched_session_kind': 'imaging',
+            'created_session_label': '',
+            'created_session_kind': '',
+            'source_row_uid': '',
+            'nearest_imaging_session_label': '',
+            'nearest_imaging_day_delta': '',
+            'dry_run_applied': bool(dry_run),
             'fields_written': [],
             'canonical_empty': [],
             'pre_existing': [],
             'site_raw_written': [],
             'unknown_skipped': [],
+            'fields_written_count': 0,
         }
 
         try:
@@ -380,8 +675,17 @@ def run_second_stage_with_inputs(
             )
             if subject is None:
                 audit['match_status'] = f'error: subject {subject_id} not found'
-                return audit
+                audit['reason_code'] = 'subject_not_found'
+                return finalize_audit(audit)
             subject = subject.reload()
+            # Reload each session so .info is populated — list responses from the
+            # Flywheel SDK return lightweight objects with empty .info, which would
+            # cause _find_non_imaging_session_by_uid to miss existing NI sessions
+            # and create duplicates on every run.
+            subject_sessions = [s.reload() for s in subject.sessions()]
+            imaging_sessions = [s for s in subject_sessions if not _is_non_imaging_session(s)]
+
+            session = None
 
             # --- Session matching ---
             if session_match_mode == 'date':
@@ -393,7 +697,9 @@ def run_second_stage_with_inputs(
                         f'with configured format "{session_date_format}" '
                         f'or any common fallback format'
                     )
-                    return audit
+                    audit['reason_code'] = 'date_parse_failed'
+                    return finalize_audit(audit)
+                audit['source_date_normalized'] = site_date.isoformat()
                 fmt_note = f' (fallback fmt: {used_fmt})' if used_fmt != session_date_format else ''
                 # Build candidates: match via session.timestamp OR session.label parsed as date.
                 # session.timestamp may be null for manually-created sessions;
@@ -401,24 +707,23 @@ def run_second_stage_with_inputs(
                 seen_ids = set()
                 candidates = []
                 match_methods = {}
-                for s in subject.sessions():
+                for s in imaging_sessions:
                     matched = False
                     method = None
-                    # 1. Try session.timestamp
-                    if s.timestamp:
-                        try:
-                            ts_date = s.timestamp.date()
-                            if abs((ts_date - site_date).days) <= session_date_tolerance.days:
-                                matched = True
-                                method = 'timestamp'
-                        except Exception:
-                            pass
-                    # 2. Try session label parsed as a date (using configured format + common fallbacks)
-                    if not matched:
-                        label_date = _parse_label_as_date(s.label, session_date_format)
-                        if label_date and abs((label_date - site_date).days) <= session_date_tolerance.days:
+                    candidate_date, candidate_method = _session_date_for_matching(
+                        s, session_date_format
+                    )
+                    if candidate_date is not None:
+                        delta_days = abs((candidate_date - site_date).days)
+                        if (
+                            audit['nearest_imaging_day_delta'] == ''
+                            or delta_days < audit['nearest_imaging_day_delta']
+                        ):
+                            audit['nearest_imaging_day_delta'] = delta_days
+                            audit['nearest_imaging_session_label'] = s.label
+                        if delta_days <= session_date_tolerance.days:
                             matched = True
-                            method = 'label'
+                            method = candidate_method
                     if matched and s.id not in seen_ids:
                         seen_ids.add(s.id)
                         candidates.append(s)
@@ -428,106 +733,201 @@ def run_second_stage_with_inputs(
                         f'not_found: no session within {session_date_tolerance.days}d '
                         f'of {date_str} (checked timestamp and label)'
                     )
-                    return audit
-                if len(candidates) > 1:
+                    if not additional_non_imaging_sessions:
+                        audit['reason_code'] = 'no_session_within_tolerance'
+                        return finalize_audit(audit)
+                    audit['candidate_type'] = 'non_imaging'
+                    # Fall through to the shared non-imaging upsert block below (session stays None)
+                elif len(candidates) > 1:
                     labels = [s.label for s in candidates]
                     audit['match_status'] = (
                         f'ambiguous: {len(candidates)} sessions match '
                         f'date {date_str}: {labels}'
                     )
-                    return audit
-                session = candidates[0]
-                audit['session_id'] = session.label  # record actual FW session label
-                audit['match_method'] = match_methods.get(session.id, 'unknown') + fmt_note
+                    audit['reason_code'] = 'multiple_date_matches'
+                    return finalize_audit(audit)
+                else:
+                    session = candidates[0]
+                    audit['session_id'] = session.label  # record actual FW session label
+                    audit['matched_session_label'] = session.label
+                    audit['match_method'] = match_methods.get(session.id, 'unknown') + fmt_note
 
             elif session_match_mode == 'subject_only':
-                all_sessions = list(subject.sessions())
+                all_sessions = imaging_sessions
                 if len(all_sessions) == 0:
                     audit['match_status'] = 'not_found: subject has no sessions'
-                    return audit
+                    audit['reason_code'] = 'subject_has_no_sessions'
+                    return finalize_audit(audit)
                 if len(all_sessions) > 1:
                     labels = [s.label for s in all_sessions]
                     audit['match_status'] = (
                         f'ambiguous: subject has {len(all_sessions)} sessions, '
                         f'use session_match: date to disambiguate: {labels}'
                     )
-                    return audit
+                    audit['reason_code'] = 'multiple_subject_sessions'
+                    return finalize_audit(audit)
                 session = all_sessions[0]
                 audit['session_id'] = session.label
+                audit['matched_session_label'] = session.label
 
             else:  # 'label' — exact match on Flywheel session label (default / v1)
                 session = next(
-                    (c for c in subject.sessions() if c.label == session_id), None
+                    (c for c in imaging_sessions if c.label == session_id), None
                 )
+                if session:
+                    audit['matched_session_label'] = session.label
 
             if session:
-                session = session.reload()
-                ses_dict = session.info
-                ses_dict = clean_session(ses_dict)
-                session.replace_info(ses_dict)
-                session = session.reload()
-                ses_dict = session.info
-
-                # Audit: canonical fields already populated before this update
-                audit['pre_existing'] = sorted(
-                    k for k in canonical_fields
-                    if k in ses_dict and ses_dict[k] is not None
-                )
-
-                # Audit: canonical fields present in CSV but blank for this row
-                audit['canonical_empty'] = sorted(
-                    k for k in canonical_fields
-                    if k in row
-                    and (
-                        row[k] is None
-                        or (isinstance(row[k], float) and pd.isna(row[k]))
-                        or str(row[k]).strip() == ''
-                    )
-                )
-
-                # Write values: skip identifiers, skip empty.
-                # Canonical fields go to top-level session.info.
-                # Non-canonical (site_raw pattern matches OR unknown) go to site_raw.*
-                # if store_site_raw is enabled; otherwise tracked in unknown_skipped.
-                site_raw_dict = dict(ses_dict.get(site_raw_prefix, {}))
-                for key, value in row.items():
-                    if key in identifier_cols:
-                        continue
-                    if value is None or (isinstance(value, float) and pd.isna(value)) or str(value).strip() == '':
-                        continue
-                    if key in canonical_fields:
-                        ses_dict[key] = value
-                        audit['fields_written'].append(key)
-                    else:
-                        # Non-canonical: route to site_raw.* or track as skipped
-                        if store_site_raw:
-                            site_raw_dict[key] = value
-                            audit['site_raw_written'].append(key)
-                        else:
-                            audit['unknown_skipped'].append(key)
-
-                if site_raw_dict:
-                    ses_dict[site_raw_prefix] = site_raw_dict
-
+                write_row_values_to_session(session, is_non_imaging=False)
                 audit['match_status'] = 'updated'
-                if replace:
-                    session.replace_info(ses_dict)
-                else:
-                    session.update_info(ses_dict)
+                audit['row_status'] = 'imaging_matched'
+                return finalize_audit(audit)
             else:
                 audit['match_status'] = 'not_found'
 
+                if not additional_non_imaging_sessions:
+                    audit['reason_code'] = 'session_label_not_found'
+                    return finalize_audit(audit)
+
+                # Phase-2 non-imaging upsert flow
+                audit['candidate_type'] = 'non_imaging'
+                audit['matched_session_kind'] = 'non_imaging'
+
+                if not non_img_date_field or non_img_date_field not in row:
+                    audit['reason_code'] = 'missing_non_imaging_date'
+                    return finalize_audit(audit)
+
+                non_img_date_raw = _normalize_str(row.get(non_img_date_field))
+                audit['source_date_raw'] = non_img_date_raw
+                non_img_date, _ = _parse_csv_date(non_img_date_raw, non_img_date_format)
+                if non_img_date is None:
+                    audit['reason_code'] = 'date_parse_failed'
+                    return finalize_audit(audit)
+                audit['source_date_normalized'] = non_img_date.isoformat()
+
+                visit_type = ''
+                if non_img_visit_type_field:
+                    visit_type = _normalize_str(row.get(non_img_visit_type_field))
+                if not visit_type:
+                    visit_type = _normalize_str(row.get('studyTimepoint'))
+
+                force_create = False
+                if non_img_force_field:
+                    force_create = _to_bool_with_truthy(
+                        row.get(non_img_force_field), non_img_force_values
+                    )
+
+                marker_present = any(
+                    _normalize_str(row.get(marker_field))
+                    for marker_field in non_img_marker_fields
+                )
+                visit_type_norm = visit_type.lower()
+                visit_type_allowed = (
+                    (not non_img_visit_type_allowlist)
+                    or (visit_type_norm in non_img_visit_type_allowlist)
+                )
+
+                has_marker_evidence = (
+                    (bool(visit_type) and visit_type_allowed)
+                    or marker_present
+                    or force_create
+                )
+
+                if non_imaging_require_visit_marker and not has_marker_evidence:
+                    audit['reason_code'] = 'no_visit_marker'
+                    return finalize_audit(audit)
+
+                if non_img_visit_type_allowlist and visit_type and not visit_type_allowed and not force_create:
+                    audit['reason_code'] = 'visit_type_not_allowed'
+                    return finalize_audit(audit)
+
+                nearest_delta = None
+                nearest_label = ''
+                for img_session in imaging_sessions:
+                    img_date, _ = _session_date_for_matching(img_session, session_date_format)
+                    if img_date is None:
+                        continue
+                    delta = abs((img_date - non_img_date).days)
+                    if nearest_delta is None or delta < nearest_delta:
+                        nearest_delta = delta
+                        nearest_label = img_session.label
+
+                if nearest_delta is not None:
+                    audit['nearest_imaging_day_delta'] = nearest_delta
+                    audit['nearest_imaging_session_label'] = nearest_label
+
+                within_guard_window = (
+                    nearest_delta is not None
+                    and nearest_delta <= int(non_imaging_block_if_near_imaging_days)
+                )
+                allow_override = (
+                    non_imaging_allow_within_imaging_window_if_explicit and force_create
+                )
+                if within_guard_window and not allow_override:
+                    audit['match_status'] = 'non_imaging_blocked_near_imaging'
+                    audit['reason_code'] = 'near_imaging_guard'
+                    return finalize_audit(audit)
+
+                source_row_uid = _build_source_row_uid(
+                    context_project_label,
+                    subject_id,
+                    audit['source_date_normalized'],
+                    visit_type,
+                )
+                audit['source_row_uid'] = source_row_uid
+
+                existing_non_img = _find_non_imaging_session_by_uid(
+                    subject_sessions, source_row_uid
+                )
+                if not existing_non_img:
+                    # Fallback: sessions created before UID tracking won't have
+                    # source_row_uid in their info — match by label pattern instead.
+                    # write_row_values_to_session will stamp the UID so future runs
+                    # use the UID path.
+                    existing_non_img = _find_non_imaging_session_by_label(
+                        subject_sessions, non_imaging_label_prefix, visit_type, non_img_date
+                    )
+                if existing_non_img:
+                    audit['session_id'] = existing_non_img.label
+                    audit['matched_session_label'] = existing_non_img.label
+                    write_row_values_to_session(existing_non_img, is_non_imaging=True)
+                    audit['match_status'] = 'non_imaging_updated'
+                    audit['row_status'] = 'non_imaging_updated'
+                    return finalize_audit(audit)
+
+                existing_labels = {s.label for s in subject_sessions}
+                created_label = _derive_non_imaging_label(
+                    non_imaging_label_prefix, visit_type, non_img_date, existing_labels
+                )
+                audit['created_session_label'] = created_label
+                audit['created_session_kind'] = 'non_imaging'
+
+                if dry_run:
+                    audit['session_id'] = created_label
+                    audit['match_status'] = 'non_imaging_created'
+                    audit['row_status'] = 'non_imaging_created'
+                    return finalize_audit(audit)
+
+                new_session = subject.add_session({'label': created_label})
+                new_session = new_session.reload()
+                audit['session_id'] = new_session.label
+                write_row_values_to_session(new_session, is_non_imaging=True)
+                audit['match_status'] = 'non_imaging_created'
+                audit['row_status'] = 'non_imaging_created'
+                return finalize_audit(audit)
+
         except Exception as e:
             audit['match_status'] = f'error: {e}'
+            audit['reason_code'] = 'exception'
 
-        return audit
+        return finalize_audit(audit)
 
     replace = True
     audit_rows = []
     with ThreadPoolExecutor(max_workers=8) as executor:
         futures = [
-            executor.submit(process_row, row, replace)
-            for _, row in csv_data.iterrows()
+            executor.submit(process_row, row_idx, row, replace)
+            for row_idx, row in csv_data.iterrows()
         ]
         for future in as_completed(futures):
             result = future.result()
@@ -538,8 +938,12 @@ def run_second_stage_with_inputs(
     run_timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
     audit_path = "/flywheel/v0/output/reconciliation_report.csv"
     audit_fieldnames = [
-        'run_timestamp', 'subject_id', 'session_id', 'match_status', 'match_method',
-        'fields_written', 'canonical_empty',
+        'run_timestamp', 'row_index', 'subject_id', 'session_id', 'match_status', 'match_method',
+        'row_status', 'reason_code', 'source_date_raw', 'source_date_normalized',
+        'candidate_type', 'matched_session_label', 'matched_session_kind',
+        'created_session_label', 'created_session_kind', 'source_row_uid',
+        'nearest_imaging_session_label', 'nearest_imaging_day_delta', 'dry_run_applied',
+        'fields_written_count', 'fields_written', 'canonical_empty',
         'pre_existing', 'site_raw_written', 'unknown_skipped',
     ]
     with open(audit_path, 'w', newline='') as f:
@@ -548,10 +952,25 @@ def run_second_stage_with_inputs(
         for r in audit_rows:
             writer.writerow({
                 'run_timestamp':      run_timestamp,
+                'row_index':          r.get('row_index', ''),
                 'subject_id':         r['subject_id'],
                 'session_id':         r['session_id'],
                 'match_status':       r['match_status'],
                 'match_method':       r.get('match_method', ''),
+                'row_status':         r.get('row_status', ''),
+                'reason_code':        r.get('reason_code', ''),
+                'source_date_raw':    r.get('source_date_raw', ''),
+                'source_date_normalized': r.get('source_date_normalized', ''),
+                'candidate_type':     r.get('candidate_type', ''),
+                'matched_session_label': r.get('matched_session_label', ''),
+                'matched_session_kind': r.get('matched_session_kind', ''),
+                'created_session_label': r.get('created_session_label', ''),
+                'created_session_kind': r.get('created_session_kind', ''),
+                'source_row_uid':     r.get('source_row_uid', ''),
+                'nearest_imaging_session_label': r.get('nearest_imaging_session_label', ''),
+                'nearest_imaging_day_delta': r.get('nearest_imaging_day_delta', ''),
+                'dry_run_applied':    r.get('dry_run_applied', False),
+                'fields_written_count': r.get('fields_written_count', 0),
                 'fields_written':     '; '.join(r['fields_written']),
                 'canonical_empty':    '; '.join(r['canonical_empty']),
                 'pre_existing':       '; '.join(r['pre_existing']),
