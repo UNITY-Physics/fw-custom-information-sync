@@ -1,17 +1,11 @@
-old_key_new_key : { 
-            
+old_key_new_key : {
+
             # Casing fixes — old lowercase forms -> agreed canonical (v2 alignment)
             "cohortLocation_city": "CohortLocation_city",
             "cohortLocation_country": "CohortLocation_country",
             "maternalEducation_HHS": "MaternalEducation_HHS",
             "maternalEducation_schoolingYears": "MaternalEducation_schoolingYears",
             "timepoint_FamilySize": "timepointFamilySize",
-
-            # Old agreed casing that was previously canonical (now reversed)
-            "CohortLocation_country": "CohortLocation_country",
-            "MaternalEducation_HHS": "MaternalEducation_HHS",
-            "MaternalEducation_schoolingYears": "MaternalEducation_schoolingYears",
-            "timepointFamilySize": "timepointFamilySize",
 
             # Fields moved to Derived section — old keys in session custom info
             "childHAZ": "HAZ",
@@ -22,7 +16,6 @@ old_key_new_key : {
             "Timepoint": "studyTimepoint",
             "Other:childBMI": "BMI",
             "Other:childWAZ": "WAZ",
-            "Other:BirthingLocation": "other:BirthingLocation",
 
             "estimated_hc_cm": "childTimepointHC_MRI_cm",
             "estimatd_hc_cm": "childTimepointHC_MRI_cm",
@@ -31,8 +24,6 @@ old_key_new_key : {
             "gestational_age_weeks": "childGestation_weeks",
             "sex_at_birth": "childBiologicalSex",
             "birth_weight_kg": "childBirthWeight_kgs",
-            "birth_length_cm": "childBirthLength_cm",
-            "birth_HC_cm": "childBirthHC_cm",
             "num_children_in_family": "timepoint_otherChildrenLivingWithChild",
             "birth_order": "childBirthOrdinal",
 
@@ -43,7 +34,6 @@ old_key_new_key : {
 
             "child_health_group": "childTimepointHealthGroup",
 
-            "current_height_cm": "childTimepointHeight_cm",
             "current_weight_kg": "childTimepointWeight_kgs",
             "country_of_birth": "childCountryOfBirth",
             "city_of_birth": "childCityOfBirth",
@@ -51,13 +41,20 @@ old_key_new_key : {
             "maternal_education": "MaternalEducation_HHS",
             "maternal_education_years": "MaternalEducation_schoolingYears",
             "current_hc_cm": "childTimepointHC_measured_cm",
-            "birth_hc_cm": "childBirthHC_cm",
 
             "num_children_in_household": "timepoint_otherChildrenLivingWithChild",
             "num_adults_in_household": "timepoint_adultsLivingWithChild",
             "family_size_at_scan": "timepointFamilySize"
-        
+
             }
 
 
-delete_keys : ["father_owns_cellphone","mother_owns_cellphone","current_head_circumference_cm","other:combinedSES","other:paternalEDU","other:maternalEDU","other:BirthingLocation","childSES"]
+delete_keys : [
+    "father_owns_cellphone", "mother_owns_cellphone", "current_head_circumference_cm",
+    "other:combinedSES", "other:paternalEDU", "other:maternalEDU", "other:BirthingLocation",
+    "Other:BirthingLocation", "childSES",
+    "birth_hc_cm", "birth_length_cm", "current_height_cm",
+    "childBirthHC_cm", "childBirthLength_cm", "childTimepointHeight_cm",
+    "childTimepointWeight_lbs",
+    "gsed_composite_score", "gsed_daz", "gsed_psychosocial_score"
+]

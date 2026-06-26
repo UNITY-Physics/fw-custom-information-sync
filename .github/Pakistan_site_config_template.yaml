@@ -1,0 +1,117 @@
+# ============================================================
+# UNITY Custom Information Sync — Site Config Template
+# Site: Pakistan
+# Version: 2
+# ============================================================
+
+# --- Subject / session matching ---
+
+# REQUIRED: the column in your CSV that holds the subject identifier.
+id_field: "study_id"
+
+# Match rows to Flywheel sessions by scan date.
+session_match: "date"
+session_date_field: "scan_date"
+session_date_format: "%d/%m/%Y"
+session_date_tolerance_days: 1
+ 
+# --- Variable mapping ---
+
+variable_map:
+
+  # === Demographics ===
+
+  StudyID: "study_id"
+  UniqueStudyID: "study_id"
+
+  studyTimepoint: "visit"                              # str  e.g. "12 month"
+
+  # --- Timepoint anthropometrics ---
+  childTimepointAge_days: "age_scan_days"              # float  (379 in sample)
+  childTimepointWeight_kgs: "weight"                   # float  (kg)
+  childTimepointHeight_inches: "length"                # float  (cm -> inches via unit_map)
+  childTimepointHC_measured_cm: "hc_cm"               # float  (cm)
+
+  # --- Child characteristics ---
+  childBiologicalSex: "male_child"                     # str  -> see value_map below
+  childGestation_weeks: "gestational_age_weeks"        # float
+  childBirthWeight_kgs: "birth_weight_kg"              # float  (kg)
+  childBirthLength_inches: "birth_length_cm"           # float  (cm -> inches via unit_map)
+  # childBirthHC_cm not in agreed schema; birth_hc_cm routed to site_raw via site_raw_pattern
+  maternalAgeAtChildBirth_years: "mat_age"             # float
+  childCountryOfBirth: "country_of_birth"              # str
+  # parity = prior successful births (0-indexed), so childBirthOrdinal = parity + 1.
+  # The gear has no add_N unit conversion; pre-process the CSV or add gear support before enabling.
+  childBirthOrdinal: "parity"                        # float (needs +1 offset — see note above)
+
+  # --- Household composition ---
+  timepointFamilySize: "household_size"                # float
+  timepoint_otherChildrenLivingWithChild: "num_children_in_household"  # float
+
+  # === SES ===
+  MaternalEducation_schoolingYears: "school_yrs"       # float
+
+  # === Cognitive ===
+  gsed_LongForm_DAZScore: "daz_lf"                     # float
+  gsed_ShortForm_DAZScore: "daz_sf"                    # float
+
+  # === Derived WHO z-scores ===
+  WAZ: "weight_for_age_zscore"                         # float
+  HAZ: "length_for_age_zscore"                         # float
+  WHZ: "weight_for_length_zscore"                      # float
+  HCZ: "hc_for_age_zscore"                             # float
+
+  # === Clinical ===
+
+# --- Constant values ---
+
+constant_map:
+  CohortLocation_country: "Pakistan"
+
+# --- Value transforms ---
+
+value_map:
+  childBiologicalSex:
+    "yes": "Male"
+    "no": "Female"
+
+# --- Unit conversions ---
+
+unit_map:
+  childTimepointHeight_inches:
+    source_unit: "cm"
+    target_unit: "inches"
+    conversion: "multiply_by_0.393701"
+  childBirthLength_inches:
+    source_unit: "cm"
+    target_unit: "inches"
+    conversion: "multiply_by_0.393701"
+
+# --- Column filtering ---
+
+# Internal IDs not needed in Flywheel custom info.
+drop_columns:
+  - "momid"
+  - "pregid"
+  - "infantid"
+
+# GSED item-level columns (gl1*, gs1*) are silently ignored — not canonical, not site_raw
+# (no drop_pattern option; listing 200+ columns in drop_columns is impractical).
+# All other non-canonical columns with research value are routed to site_raw below.
+site_raw_pattern: "^(Scan_|Success_type_|REMIND_|birth_setting$|birth_hc_cm$|birth_anthro|birth_.*zscore|agedays_gsed|date_assessment_gsed|dscore_|dob$|anthro_date$|diff_anthro_scan$|age_anthro_days$|smoke$|chew_|drink$|gravidity$|educated$)"
+site_raw_prefix: "site_raw"
+
+# --- Non-imaging session controls ---
+
+non_imaging_date_field: null
+non_imaging_date_format: "%d/%m/%Y"
+non_imaging_visit_type_field: null
+non_imaging_visit_type_allowlist: []
+non_imaging_visit_marker_fields: []
+non_imaging_force_create_field: null
+non_imaging_force_create_values:
+  - "yes"
+  - "true"
+  - "1"
+non_imaging_include_fields_regex: null
+non_imaging_exclude_fields_regex: null

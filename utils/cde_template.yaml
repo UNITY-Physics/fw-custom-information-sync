@@ -22,10 +22,8 @@ Demographics : {
         # --- Timepoint anthropometrics ---
         'childTimepointAge_days': 0,
         'childTimepointAge_months': 0,
-        'childTimepointHeight_cm': 0,
         'childTimepointHeight_inches': 0,
         'childTimepointWeight_kgs': 0,
-        'childTimepointWeight_lbs': 0,
         'childTimepointHC_measured_cm': 0,
         'childTimepointHC_MRI_cm': 0,
 
@@ -40,9 +38,7 @@ Demographics : {
         'childGestation_weeks': 0,
         'childBirthWeight_lbs': 0,
         'childBirthWeight_kgs': 0,
-        'childBirthLength_cm': 0,
         'childBirthLength_inches': 0,
-        'childBirthHC_cm': 0,
         'maternalAgeAtChildBirth_years': 0,
         'childBirthOrdinal': 0,
         'childCountryOfBirth': None,

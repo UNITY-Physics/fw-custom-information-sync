@@ -58,10 +58,8 @@ variable_map:
   # --- Timepoint anthropometrics ---
   # childTimepointAge_days: "your_column"              # float
   # childTimepointAge_months: "your_column"            # float
-  # childTimepointHeight_cm: "your_column"             # float
-  # childTimepointHeight_inches: "your_column"         # float
+  # childTimepointHeight_inches: "your_column"         # float  (use unit_map if source is cm)
   # childTimepointWeight_kgs: "your_column"            # float
-  # childTimepointWeight_lbs: "your_column"            # float
   # childTimepointHC_measured_cm: "your_column"        # float
   # childTimepointHC_MRI_cm: "your_column"             # float
 
@@ -76,9 +74,7 @@ variable_map:
   # childGestation_weeks: "your_column"                # float
   # childBirthWeight_lbs: "your_column"                # float
   # childBirthWeight_kgs: "your_column"                # float
-  # childBirthLength_cm: "your_column"                 # float
-  # childBirthLength_inches: "your_column"             # float
-  # childBirthHC_cm: "your_column"                     # float
+  # childBirthLength_inches: "your_column"             # float  (use unit_map if source is cm)
   # maternalAgeAtChildBirth_years: "your_column"       # float
   # childBirthOrdinal: "your_column"                   # float
   # childCountryOfBirth: "your_column"                 # str
@@ -241,10 +237,10 @@ value_map:
   #   source_unit: "lbs"
   #   target_unit: "kg"
   #   conversion: "multiply_by_0.453592"
-  # childBirthLength_cm:
-  #   source_unit: "inches"
-  #   target_unit: "cm"
-  #   conversion: "multiply_by_2.54"
+  # childBirthLength_inches:
+  #   source_unit: "cm"
+  #   target_unit: "inches"
+  #   conversion: "multiply_by_0.393701"
 
 
 # IMPORTANT: use block style (indented lines), NOT flow style ({...}).
