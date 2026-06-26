@@ -256,7 +256,7 @@ def parse_value(val, target_type):
         if pd.isna(val):
             return None
         if target_type == bool:
-            return str(val).strip().lower() in ["true", "yes"]
+            return _to_bool_with_truthy(val)
         elif target_type == list:
             return parse_maybe_list(val)
         elif target_type == int:
@@ -289,13 +289,19 @@ def _id_to_str(x):
     return s
 
 
-def cast_metadata_fields(df, template):
+def cast_metadata_fields(df, template, field_types=None):
     identifier_columns = {'group_id', 'project_id', 'subject_id', 'session_id'}
+    _type_map = {'float': float, 'bool': bool, 'str': str, 'list': list, 'int': int}
     for col in df.columns:
         if col in identifier_columns:
             df[col] = df[col].apply(_id_to_str)
             continue
-        if col in template:
+        if field_types and col in field_types:
+            # Explicit type declaration takes priority over default-value inference.
+            # Required for fields whose default is None but type is not str (e.g. z-scores).
+            target_type = _type_map.get(field_types[col], str)
+            df[col] = df[col].apply(lambda x: parse_value(x, target_type))
+        elif col in template:
             example = template[col]
             if isinstance(example, bool):
                 target_type = bool
@@ -310,11 +316,10 @@ def cast_metadata_fields(df, template):
             else:
                 continue
             df[col] = df[col].apply(lambda x: parse_value(x, target_type))
-            # print(col, target_type)
         else:
             # Unknown column: use smart fallback
             df[col] = df[col].apply(smart_fallback_parser)
-    
+
     return df
 
 
@@ -340,22 +345,37 @@ def apply_site_config(df, site_config):
     drop = site_config.get('drop_columns') or []
     df = df.drop(columns=[c for c in drop if c in df.columns], errors='ignore')
 
-    # 2. Map site's subject-ID column to the canonical 'subject_id' column name
+    # 2. Map site's subject-ID column to the canonical 'subject_id' column name.
+    # Copy (not rename) so the original id_field column is still available for variable_map
+    # entries that also need to read from it (e.g. StudyID and UniqueStudyID both from study_id).
     id_field = site_config.get('id_field')
     if id_field and id_field in df.columns and 'subject_id' not in df.columns:
-        df = df.rename(columns={id_field: 'subject_id'})
+        df['subject_id'] = df[id_field]
 
-    # 3. variable_map: canonical_field -> site_column  (column rename only)
-    # Constants belonging here for backward compatibility are also accepted.
+    # 3. variable_map: canonical_field -> site_column
+    # Uses copy semantics with deferred source-column drop so that the same source column
+    # can map to multiple canonical targets (e.g. study_id -> StudyID and UniqueStudyID).
     variable_map = site_config.get('variable_map') or {}
+    mapped_sources = set()
     for canonical, source in variable_map.items():
         if source is None:
             continue
         if isinstance(source, str) and source in df.columns:
-            df = df.rename(columns={source: canonical})
+            df[canonical] = df[source]  # copy; source dropped after loop
+            if source != canonical:
+                mapped_sources.add(source)
+        elif isinstance(source, str):
+            log.warning(
+                "variable_map: source column '%s' not found in CSV for canonical field '%s' — "
+                "check for a typo in the column name.", source, canonical
+            )
         else:
-            # legacy constant fallback — prefer constant_map for new configs
-            df[canonical] = source
+            df[canonical] = source  # scalar constant — prefer constant_map for new configs
+    # Drop source columns that were mapped away (deferred to allow same-source multi-target).
+    df = df.drop(columns=[c for c in mapped_sources if c in df.columns], errors='ignore')
+    # Ensure id_field column is removed if it was not consumed by variable_map.
+    if id_field and id_field in df.columns and id_field != 'subject_id':
+        df = df.drop(columns=[id_field], errors='ignore')
 
     # 3b. constant_map: canonical_field -> scalar  (same value for every row)
     # Use for site-level fields that don't vary per participant: country, city,
@@ -364,15 +384,26 @@ def apply_site_config(df, site_config):
     for canonical, value in constant_map.items():
         if value is None:
             continue
+        if canonical in variable_map and canonical in df.columns:
+            log.warning(
+                "constant_map: '%s' is also in variable_map — constant value '%s' will overwrite "
+                "per-row CSV values.", canonical, value
+            )
         df[canonical] = value
 
     # 4. value_map: remap raw cell values to canonical controlled-vocabulary values
     value_map = site_config.get('value_map') or {}
     for field, mapping in value_map.items():
-        if field in df.columns:
-            df[field] = df[field].apply(
-                lambda x, m=mapping: m.get(str(x), x) if pd.notna(x) else x
+        if field not in df.columns:
+            log.warning(
+                "value_map: field '%s' not found in CSV (after variable_map renames) — "
+                "skipping remaps. Ensure variable_map and value_map use the same canonical field name.",
+                field
             )
+            continue
+        df[field] = df[field].apply(
+            lambda x, m=mapping: m.get(str(x), x) if pd.notna(x) else x
+        )
 
     # 5. unit_map: numeric unit conversion before type casting
     unit_map = site_config.get('unit_map') or {}
@@ -459,6 +490,10 @@ def run_second_stage_with_inputs(
 
     metadata_template = demographics_cde | ses_cde | cognitive_cde | clinical_cde | derived_cde
     canonical_fields = set(metadata_template.keys())
+    field_types = metadata.get('FieldTypes') or {}
+
+    with open("/flywheel/v0/utils/old_new_harmonization.yaml", 'r') as file:
+        harmonization_map = yaml.safe_load(file)
 
     # Load site config if provided
     site_config = None
@@ -546,7 +581,7 @@ def run_second_stage_with_inputs(
         print(f"Missing required column(s): {', '.join(sorted(missing))}. Exiting.")
         sys.exit(1)
 
-    csv_data = cast_metadata_fields(csv_data, metadata_template)
+    csv_data = cast_metadata_fields(csv_data, metadata_template, field_types=field_types)
 
     # Determine which canonical fields are absent from the CSV entirely (same for all rows)
     canonical_not_in_csv = sorted(canonical_fields - set(csv_data.columns))
@@ -575,7 +610,7 @@ def run_second_stage_with_inputs(
         def write_row_values_to_session(target_session, is_non_imaging=False):
             target_session = target_session.reload()
             ses_dict = target_session.info
-            ses_dict = clean_session(ses_dict)
+            ses_dict = clean_session(ses_dict, harmonization_map=harmonization_map, defaults_template=metadata_template)
             if not dry_run:
                 target_session.replace_info(ses_dict)
                 target_session = target_session.reload()

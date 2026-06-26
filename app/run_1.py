@@ -56,8 +56,12 @@ def run_first_stage_no_inputs(context, destination, project):
     for field in CDE:
         all_fieldnames.append(field)
 
+    with open("/flywheel/v0/utils/old_new_harmonization.yaml", 'r') as file:
+        harmonization_map = yaml.safe_load(file)
+
     # Store all rows to write later
     all_rows = []
+    failed_sessions = 0
 
 
     # Get the current timestamp
@@ -76,47 +80,45 @@ def run_first_stage_no_inputs(context, destination, project):
 
     # Loop over all sessions in the project
     for session in project.sessions():
-        print(f"\t\t{session.subject.label}")
-        subject = session.subject
-        subject = subject.reload()
-        if subject.type != "Phantom":
-            print(f"\t\t{session.label}")
-            session = session.reload()
+        try:
+            print(f"\t\t{session.subject.label}")
+            subject = session.subject
+            subject = subject.reload()
+            if subject.type != "Phantom":
+                print(f"\t\t{session.label}")
+                session = session.reload()
 
-            # Dictionary from session.info
-            ses_dict = session.info
-            #prepopulate if CDE fields are not present
-            # Add missing metadata fields without overwriting existing values
-            for key, _ in CDE.items():
+                # Dictionary from session.info
+                ses_dict = session.info
+                for key, _ in CDE.items():
+                    if key in ses_dict:
+                        continue
+                    else:
+                        ses_dict[key] = None
 
-                if key in ses_dict:
-                    # If the key exists, skip it
-                    continue
-                else:
-                    ses_dict[key] = None
-        
-            ses_dict = clean_session(ses_dict)
-            session.replace_info(ses_dict)
-            
+                ses_dict = clean_session(ses_dict, harmonization_map=harmonization_map, defaults_template=CDE)
+                session.replace_info(ses_dict)
 
-            # Add additional info to the dictionary
-            ses_dict['group_id'] = group
-            ses_dict['project_id'] = project.label
-            ses_dict['subject_id'] = subject.label
-            ses_dict['session_id'] = session.label
+                ses_dict['group_id'] = group
+                ses_dict['project_id'] = project.label
+                ses_dict['subject_id'] = subject.label
+                ses_dict['session_id'] = session.label
 
-            # Check for new keys in the ses_dict and update headers
-            new_keys = [key for key in ses_dict.keys() if key not in all_fieldnames]
-            if new_keys:
-                all_fieldnames.extend(new_keys)  # Add any new keys to the fieldnames
+                new_keys = [key for key in ses_dict.keys() if key not in all_fieldnames]
+                if new_keys:
+                    all_fieldnames.extend(new_keys)
 
-            # Add the row to our collection of rows
-            all_rows.append({key: ses_dict.get(key, None) for key in all_fieldnames})
+                all_rows.append({key: ses_dict.get(key, None) for key in all_fieldnames})
+        except Exception as e:
+            log.error("Failed to process session %s: %s", getattr(session, 'label', 'unknown'), e)
+            failed_sessions += 1
 
     # After processing all sessions, write the CSV with updated headers
     write_csv(filename, all_fieldnames, all_rows)
 
     print(f"Data saved to {filename}")
+    if failed_sessions:
+        print(f"WARNING: {failed_sessions} session(s) failed to process — check logs above.")
 
     # Optionally write the site config template to output
     if context.config.get('download_site_config_template', False):
@@ -125,6 +127,6 @@ def run_first_stage_no_inputs(context, destination, project):
         shutil.copy(template_src, template_dst)
         print(f"Site config template written to {template_dst}")
 
-    return 0  # all is well
+    return 1 if failed_sessions else 0
 
 

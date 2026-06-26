@@ -140,11 +140,19 @@ If a column in your spreadsheet already uses the exact UNITY canonical name (e.g
 
 #### Hardcoded values (same for every participant)
 
-If a value is the same for every participant and is not in your spreadsheet at all — for example, all participants are from the same country — you can write it directly as a constant:
+If a value is the same for every participant and is not in your spreadsheet at all — for example, all participants are from the same country — use `constant_map` (see Step 4b below), **not** `variable_map`. Writing a string literal directly inside `variable_map` is not supported and will be logged as a warning.
+
+### Step 4b — Set constant values (same for all participants)
+
+If a value does not come from your spreadsheet but is the same for every participant — for example, all sessions are from Pakistan, or all were scanned at 3T — use `constant_map`:
 
 ```yaml
-  CohortLocation_country: "Kenya"
+constant_map:
+  CohortLocation_country: "Pakistan"
+  MRI_fieldStrength: 3.0
 ```
+
+Every session will receive these values regardless of what the CSV contains. Use `variable_map` only for values that **vary per row**.
 
 ### Step 5 — Remap coded values (if needed)
 
@@ -165,7 +173,7 @@ Only include fields where your codes differ from the expected values.
 
 If any measurements in your spreadsheet are in different units from the UNITY standard, declare them in `unit_map`.
 
-UNITY canonical units: **weight → kg**, **height/length → cm**, **head circumference → cm**, **gestational age → weeks**, **age → days**.
+UNITY canonical units: **weight → kg**, **height/length → inches**, **head circumference → cm**, **gestational age → weeks**, **age → days**.
 
 Example — birth weight recorded in pounds:
 ```yaml
@@ -302,7 +310,7 @@ drop_columns:
 Check the reconciliation report. If every row shows `not_found`, the subject IDs or dates in your spreadsheet are not matching what is in Flywheel. See [Sessions not matching](#sessions-not-matching).
 
 **Q: Does the gear delete data from Flywheel?**  
-No. The gear only adds or updates values. It never deletes existing session custom info fields.
+Run 2 does not delete existing session custom info fields — it only adds or updates values. However, Run 1 applies `clean_session`, which permanently removes fields listed in the legacy migration table (`old_new_harmonization.yaml`). This affects old field names that have been renamed or removed from the agreed schema (e.g. `birth_hc_cm`, `birth_length_cm`, v1 GSED scoring columns). Canonical fields in `cde_template.yaml` are never removed by Run 1 — only legacy keys listed in `delete_keys`.
 
 **Q: What is `dry_run`?**  
 A gear config option (set in the Flywheel gear run form, not in this file). When enabled, the gear runs through all matching and mapping logic and writes the reconciliation report, but does not actually write any values to Flywheel. Use it to verify your config is correct before committing.
@@ -422,7 +430,7 @@ id_field: "participant:id"      ✓
 | Measurement | UNITY unit |
 |---|---|
 | Weight | kg |
-| Height / length | cm |
+| Height / length | inches |
 | Head circumference | cm |
 | Gestational age | weeks |
 | Age | days |

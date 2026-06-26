@@ -1,8 +1,11 @@
 # Canonical Data Element (CDE) template for UNITY Custom Information Sync gear.
 # Field name casing aligns with final_agreed_columns.csv (UNITY consortium v2 agreement).
-# Default value determines inferred type: 0 -> float, None -> str, True -> bool, [] -> list.
-# Sections: Demographics, SES, Cognitive, Clinical, Derived, SiteRaw
-# Backup of previous version: cde_template.yaml.bak
+#
+# All canonical fields default to None (not yet collected).
+# Field types are declared explicitly in the FieldTypes section below.
+# cast_metadata_fields reads FieldTypes to apply correct type conversion from CSV values.
+#
+# Sections: Demographics, SES, Cognitive, Clinical, Derived, FieldTypes, SiteRaw
 
 Demographics : {
 
@@ -15,32 +18,32 @@ Demographics : {
         'UniqueStudyID': None,
 
         # --- Session / MRI metadata ---
-        'MRI_fieldStrength': 0,
+        'MRI_fieldStrength': None,
         'studyTimepoint': None,
-        'mriCollectedAtTimepoint': True,
+        'mriCollectedAtTimepoint': None,
 
         # --- Timepoint anthropometrics ---
-        'childTimepointAge_days': 0,
-        'childTimepointAge_months': 0,
-        'childTimepointHeight_inches': 0,
-        'childTimepointWeight_kgs': 0,
-        'childTimepointHC_measured_cm': 0,
-        'childTimepointHC_MRI_cm': 0,
+        'childTimepointAge_days': None,
+        'childTimepointAge_months': None,
+        'childTimepointHeight_inches': None,
+        'childTimepointWeight_kgs': None,
+        'childTimepointHC_measured_cm': None,
+        'childTimepointHC_MRI_cm': None,
 
         # --- Household composition ---
-        'timepointFamilySize': 0,
-        'timepoint_adultsLivingWithChild': 0,
-        'timepoint_otherChildrenLivingWithChild': 0,
+        'timepointFamilySize': None,
+        'timepoint_adultsLivingWithChild': None,
+        'timepoint_otherChildrenLivingWithChild': None,
 
         # --- Child characteristics ---
         'childBiologicalSex': None,
-        'childGestation_days': 0,
-        'childGestation_weeks': 0,
-        'childBirthWeight_lbs': 0,
-        'childBirthWeight_kgs': 0,
-        'childBirthLength_inches': 0,
-        'maternalAgeAtChildBirth_years': 0,
-        'childBirthOrdinal': 0,
+        'childGestation_days': None,
+        'childGestation_weeks': None,
+        'childBirthWeight_lbs': None,
+        'childBirthWeight_kgs': None,
+        'childBirthLength_inches': None,
+        'maternalAgeAtChildBirth_years': None,
+        'childBirthOrdinal': None,
         'childCountryOfBirth': None,
         'childCityOfBirth': None,
         'childRace': None,
@@ -51,23 +54,23 @@ Demographics : {
 
 SES : {
         'MaternalEducation_HHS': None,
-        'MaternalEducation_schoolingYears': 0,
+        'MaternalEducation_schoolingYears': None,
         }
 
 Cognitive : {
         # GSED
-        'gsed_LongForm_DAZScore': 0,
-        'gsed_ShortForm_DAZScore': 0,
+        'gsed_LongForm_DAZScore': None,
+        'gsed_ShortForm_DAZScore': None,
 
         # MSEL
-        'msel_ELC': 0,
-        'msel_VDQ': 0,
-        'msel_NVDQ': 0,
-        'msel_FM_T': 0,
-        'msel_GM_T': 0,
-        'msel_EL_T': 0,
-        'msel_RL_T': 0,
-        'msel_VR_T': 0,
+        'msel_ELC': None,
+        'msel_VDQ': None,
+        'msel_NVDQ': None,
+        'msel_FM_T': None,
+        'msel_GM_T': None,
+        'msel_EL_T': None,
+        'msel_RL_T': None,
+        'msel_VR_T': None,
 
         # BSID
         'bsid_CCS': None,
@@ -82,51 +85,51 @@ Cognitive : {
         'bsid_socioemotionalScaled': None,
 
         # ASQ
-        'asq_Communication': 0,
-        'asq_GrossMotor': 0,
-        'asq_FineMotor': 0,
-        'asq_ProblemSolving': 0,
-        'asq_SocialIssues': 0,
+        'asq_Communication': None,
+        'asq_GrossMotor': None,
+        'asq_FineMotor': None,
+        'asq_ProblemSolving': None,
+        'asq_SocialIssues': None,
 
         # WPPSI
-        'wppsi_FSIQ': 0,
-        'wppsi_VCI': 0,
-        'wppsi_VSI': 0,
-        'wppsi_FRI': 0,
-        'wppsi_WMI': 0,
-        'wppsi_PSI': 0,
-        'wppsi_bugSearchScales': 0,
-        'wppsi_cancellationScaled': 0,
-        'wppsi_pictureMemoryScaled': 0,
-        'wppsi_zooScaled': 0,
-        'wppsi_blockDesignedScaled': 0,
-        'wppsi_objectAssemblyScaled': 0,
-        'wppsi_pictureConceptsScaled': 0,
-        'wppsi_matrixReasoningScaled': 0,
-        'wppsi_similaritiesScaled': 0,
-        'wppsi_vocabularyScaled': 0,
+        'wppsi_FSIQ': None,
+        'wppsi_VCI': None,
+        'wppsi_VSI': None,
+        'wppsi_FRI': None,
+        'wppsi_WMI': None,
+        'wppsi_PSI': None,
+        'wppsi_bugSearchScales': None,
+        'wppsi_cancellationScaled': None,
+        'wppsi_pictureMemoryScaled': None,
+        'wppsi_zooScaled': None,
+        'wppsi_blockDesignedScaled': None,
+        'wppsi_objectAssemblyScaled': None,
+        'wppsi_pictureConceptsScaled': None,
+        'wppsi_matrixReasoningScaled': None,
+        'wppsi_similaritiesScaled': None,
+        'wppsi_vocabularyScaled': None,
 
         # WISC
-        'wisc_FSIQ': 0,
-        'wisc_VCI': 0,
-        'wisc_VSI': 0,
-        'wisc_FRI': 0,
-        'wisc_WMI': 0,
-        'wisc_PSI': 0,
-        'wisc_similaritiesScaled': 0,
-        'wisc_vocabScaled': 0,
-        'wisc_BlockDesigScaled': 0,
-        'wisc_visualPuzzlesScaled': 0,
-        'wisc_matrixReasoningScaled': 0,
-        'wisc_figureWeightsScaled': 0,
-        'wisc_digitSpanScaled': 0,
-        'wisc_pictureSpanScaled': 0,
-        'wisc_CodingScaled': 0,
-        'wisc_symbolSearchScaled': 0,
+        'wisc_FSIQ': None,
+        'wisc_VCI': None,
+        'wisc_VSI': None,
+        'wisc_FRI': None,
+        'wisc_WMI': None,
+        'wisc_PSI': None,
+        'wisc_similaritiesScaled': None,
+        'wisc_vocabScaled': None,
+        'wisc_BlockDesigScaled': None,
+        'wisc_visualPuzzlesScaled': None,
+        'wisc_matrixReasoningScaled': None,
+        'wisc_figureWeightsScaled': None,
+        'wisc_digitSpanScaled': None,
+        'wisc_pictureSpanScaled': None,
+        'wisc_CodingScaled': None,
+        'wisc_symbolSearchScaled': None,
 
         # AAB
-        'aab_lwrScaled': 0,
-        'aab_mcScaled': 0,
+        'aab_lwrScaled': None,
+        'aab_mcScaled': None,
         }
 
 Clinical : {
@@ -136,18 +139,109 @@ Clinical : {
 
 Derived : {
         # WHO anthropometry z-scores (derived from height/weight/HC at timepoint)
-        'BMI': 0,
-        'BMIZ': 0,
-        'WAZ': 0,
-        'HAZ': 0,
-        'WHZ': 0,
-        'HCZ': 0,
+        'BMI': None,
+        'BMIZ': None,
+        'WAZ': None,
+        'HAZ': None,
+        'WHZ': None,
+        'HCZ': None,
 
         # Nutritional status flags (derived from z-scores)
-        'CurrentlyStunted': True,
-        'CurrentlyWasted': True,
-        'EverStunted': True,
-        'EverWasted': True,
+        'CurrentlyStunted': None,
+        'CurrentlyWasted': None,
+        'EverStunted': None,
+        'EverWasted': None,
+        }
+
+# Explicit type declarations for all non-str canonical fields.
+# cast_metadata_fields checks this before applying any fallback inference.
+# Every field that should be read from CSV as float or bool must be listed here.
+FieldTypes : {
+        # --- Demographics (float) ---
+        'MRI_fieldStrength': 'float',
+        'mriCollectedAtTimepoint': 'bool',
+        'childTimepointAge_days': 'float',
+        'childTimepointAge_months': 'float',
+        'childTimepointHeight_inches': 'float',
+        'childTimepointWeight_kgs': 'float',
+        'childTimepointHC_measured_cm': 'float',
+        'childTimepointHC_MRI_cm': 'float',
+        'timepointFamilySize': 'float',
+        'timepoint_adultsLivingWithChild': 'float',
+        'timepoint_otherChildrenLivingWithChild': 'float',
+        'childGestation_days': 'float',
+        'childGestation_weeks': 'float',
+        'childBirthWeight_lbs': 'float',
+        'childBirthWeight_kgs': 'float',
+        'childBirthLength_inches': 'float',
+        'maternalAgeAtChildBirth_years': 'float',
+        'childBirthOrdinal': 'float',
+
+        # --- SES (float) ---
+        'MaternalEducation_schoolingYears': 'float',
+
+        # --- Cognitive (float) ---
+        'gsed_LongForm_DAZScore': 'float',
+        'gsed_ShortForm_DAZScore': 'float',
+        'msel_ELC': 'float',
+        'msel_VDQ': 'float',
+        'msel_NVDQ': 'float',
+        'msel_FM_T': 'float',
+        'msel_GM_T': 'float',
+        'msel_EL_T': 'float',
+        'msel_RL_T': 'float',
+        'msel_VR_T': 'float',
+        'asq_Communication': 'float',
+        'asq_GrossMotor': 'float',
+        'asq_FineMotor': 'float',
+        'asq_ProblemSolving': 'float',
+        'asq_SocialIssues': 'float',
+        'wppsi_FSIQ': 'float',
+        'wppsi_VCI': 'float',
+        'wppsi_VSI': 'float',
+        'wppsi_FRI': 'float',
+        'wppsi_WMI': 'float',
+        'wppsi_PSI': 'float',
+        'wppsi_bugSearchScales': 'float',
+        'wppsi_cancellationScaled': 'float',
+        'wppsi_pictureMemoryScaled': 'float',
+        'wppsi_zooScaled': 'float',
+        'wppsi_blockDesignedScaled': 'float',
+        'wppsi_objectAssemblyScaled': 'float',
+        'wppsi_pictureConceptsScaled': 'float',
+        'wppsi_matrixReasoningScaled': 'float',
+        'wppsi_similaritiesScaled': 'float',
+        'wppsi_vocabularyScaled': 'float',
+        'wisc_FSIQ': 'float',
+        'wisc_VCI': 'float',
+        'wisc_VSI': 'float',
+        'wisc_FRI': 'float',
+        'wisc_WMI': 'float',
+        'wisc_PSI': 'float',
+        'wisc_similaritiesScaled': 'float',
+        'wisc_vocabScaled': 'float',
+        'wisc_BlockDesigScaled': 'float',
+        'wisc_visualPuzzlesScaled': 'float',
+        'wisc_matrixReasoningScaled': 'float',
+        'wisc_figureWeightsScaled': 'float',
+        'wisc_digitSpanScaled': 'float',
+        'wisc_pictureSpanScaled': 'float',
+        'wisc_CodingScaled': 'float',
+        'wisc_symbolSearchScaled': 'float',
+        'aab_lwrScaled': 'float',
+        'aab_mcScaled': 'float',
+
+        # --- Derived (float / bool) ---
+        'BMI': 'float',
+        'BMIZ': 'float',
+        'WAZ': 'float',
+        'HAZ': 'float',
+        'WHZ': 'float',
+        'HCZ': 'float',
+        'CurrentlyStunted': 'bool',
+        'CurrentlyWasted': 'bool',
+        'EverStunted': 'bool',
+        'EverWasted': 'bool',
         }
 
 SiteRaw : {

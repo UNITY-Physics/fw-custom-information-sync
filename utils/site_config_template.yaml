@@ -227,7 +227,7 @@ value_map:
 #
 # Canonical units:
 #   weight           -> kg
-#   height / length  -> cm
+#   height / length  -> inches  (sites providing cm must use unit_map to convert)
 #   head circumference -> cm
 #   gestational age  -> weeks
 #   age              -> days
@@ -294,6 +294,7 @@ non_imaging_force_create_values:
   - "yes"
   - "true"
   - "1"
+  - "y"
 
 # Optional regex filters for what fields are written onto non-imaging sessions.
 # If include regex is set, only matching fields are considered.

@@ -7,26 +7,33 @@ import yaml
 
 log = logging.getLogger(__name__)
 
-def clean_session(ses_dict):
+def clean_session(ses_dict, harmonization_map=None, defaults_template=None):
+    """Rename legacy session keys and remove obsolete ones.
 
+    harmonization_map and defaults_template should be pre-loaded by the caller
+    and passed in. The None-fallback paths open files at /flywheel/v0/utils/
+    which only exist inside the gear container and will raise FileNotFoundError
+    in any other environment (tests, local scripts).
+    """
 
     ###. RENAME headers from old template to new template
 
-    with open(f"/flywheel/v0/utils/old_new_harmonization.yaml", 'r') as file:
-        metadata = yaml.safe_load(file)
+    if harmonization_map is None:
+        with open(f"/flywheel/v0/utils/old_new_harmonization.yaml", 'r') as file:
+            harmonization_map = yaml.safe_load(file)
 
-    old_key_new_key = metadata['old_key_new_key']
-    delete_keys = metadata['delete_keys']
+    old_key_new_key = harmonization_map['old_key_new_key']
+    delete_keys = harmonization_map['delete_keys']
 
-    with open(f"/flywheel/v0/utils/cde_template.yaml", 'r') as file:
-        defaults = yaml.safe_load(file)
-
-    demographics_cde = defaults['Demographics']
-    ses_cde = defaults['SES']
-    cognitive_cde = defaults['Cognitive']
-    clinical_cde = defaults.get('Clinical', {})
-    derived_cde = defaults.get('Derived', {})
-    defaults_template = demographics_cde | ses_cde | cognitive_cde | clinical_cde | derived_cde
+    if defaults_template is None:
+        with open(f"/flywheel/v0/utils/cde_template.yaml", 'r') as file:
+            defaults = yaml.safe_load(file)
+        demographics_cde = defaults['Demographics']
+        ses_cde = defaults['SES']
+        cognitive_cde = defaults['Cognitive']
+        clinical_cde = defaults.get('Clinical', {})
+        derived_cde = defaults.get('Derived', {})
+        defaults_template = demographics_cde | ses_cde | cognitive_cde | clinical_cde | derived_cde
 
 
 
@@ -39,7 +46,7 @@ def clean_session(ses_dict):
         if old_key in ses_dict:
             ses_dict[new_key] = ses_dict.get(old_key, None)
 
-            if ses_dict[new_key] == "None" or ses_dict[new_key] == "0" or ses_dict[new_key] == defaults_template.get(new_key): #clean legacy defaults ("0","None" ...)
+            if ses_dict[new_key] == "None" or ses_dict[new_key] == "0":  # clear legacy string placeholders only
 
                 ses_dict[new_key] = None
 
@@ -53,13 +60,5 @@ def clean_session(ses_dict):
 
         ses_dict.pop(key,None)
         log.debug('Deleting key... %s', key)
-
-
-    for key in [key for key in ses_dict if key in defaults_template]:
-
-        if ses_dict[key] == defaults_template[key]:
-            log.debug("Setting %s to None...", key)
-            ses_dict[key] = None
-
 
     return ses_dict

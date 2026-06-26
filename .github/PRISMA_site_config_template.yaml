@@ -42,7 +42,7 @@ variable_map:
   childCountryOfBirth: "country_of_birth"              # str
   # parity = prior successful births (0-indexed), so childBirthOrdinal = parity + 1.
   # The gear has no add_N unit conversion; pre-process the CSV or add gear support before enabling.
-  childBirthOrdinal: "parity"                        # float (needs +1 offset — see note above)
+  # childBirthOrdinal: "parity"   # DISABLED: needs +1 offset (parity is 0-indexed); not yet supported
 
   # --- Household composition ---
   timepointFamilySize: "household_size"                # float
