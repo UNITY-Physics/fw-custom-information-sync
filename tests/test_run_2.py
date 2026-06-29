@@ -40,9 +40,11 @@ PAKISTAN_SITE_CONFIG = {
     "session_date_format": "%d/%m/%Y",
     "session_date_tolerance_days": 3,
     "variable_map": {
-        "cohortLocation_country": "Pakistan",   # constant for every row
         "studyTimepoint": "visit",              # rename column
         "childBiologicalSex": "male_child",     # rename column (remapped via value_map)
+    },
+    "constant_map": {
+        "cohortLocation_country": "Pakistan",   # constant for every row
     },
     "value_map": {
         "childBiologicalSex": {"yes": "Male", "no": "Female"},

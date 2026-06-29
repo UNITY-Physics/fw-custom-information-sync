@@ -11,7 +11,8 @@ Recommended sprint order:
 2. Core behavior changes in run_2 and run_1
 3. Reconciliation/report expansions
 4. Validation and concurrency safety
-5. Docs and release notes
+5. Test suite refresh
+6. Docs and release notes
 
 Estimate scale:
 1. S = 0.5 to 1 day
@@ -24,10 +25,9 @@ Estimate: S
 Depends on: none
 
 Scope:
-1. Add manifest config flag store_all_unknown_site_raw with default false.
-2. Optional flag duplicate_row_policy with default fail.
-3. Optional flag run_1_apply_legacy_cleanup with default true.
-4. Emit startup log line summarizing resolved policies.
+1. Optional flag run_1_apply_legacy_cleanup with default true.
+2. Emit startup log line summarizing resolved policies.
+3. Emit startup log line clarifying whether store_site_raw will preserve all unknown fields.
 
 Files likely touched:
 1. manifest.json
@@ -45,28 +45,29 @@ Test notes:
 1. Unit test parser defaults.
 2. Smoke test run startup logs include policy summary.
 
-## Ticket 2: Implement strict site_raw policy matrix
+## Ticket 2: Clarify site_raw reporting behavior
 Type: Feature
 Estimate: M
 Depends on: Ticket 1
 
 Scope:
-1. Enforce site_raw_pattern in write path as strict allowlist when store_site_raw is true and store_all_unknown_site_raw is false.
-2. When store_all_unknown_site_raw is true, write all unknown fields.
+1. Preserve current behavior where store_site_raw writes all unknown fields.
+2. Treat site_raw_pattern as an audit/report grouping helper for expected raw field families.
 3. Keep canonical dedup guard.
-4. Add policy-driven counters for unknown_seen, unknown_written, unknown_skipped_by_regex, unknown_skipped_by_policy.
+4. Add counters for unknown_seen, unknown_written, unknown_regex_matched, unknown_non_regex_written.
 
 Files likely touched:
 1. app/run_2.py
+2. docs/site_config_README.md
 
 Acceptance criteria:
-1. Regex present plus strict mode writes only regex-matched unknown fields.
-2. Regex absent plus strict mode writes no unknown fields.
-3. All-unknown override writes all unknown fields.
+1. store_site_raw=false still writes no unknown fields.
+2. store_site_raw=true writes all unknown fields.
+3. When site_raw_pattern is configured, reconciliation distinguishes regex-matched unknowns from other unknowns.
 4. Counters are present and correct in reconciliation output.
 
 Test notes:
-1. Unit tests for full matrix combinations.
+1. Unit tests for with-pattern and without-pattern reporting.
 2. Integration test with mixed unknown columns.
 
 ## Ticket 3: Add invalid typed value classification and warnings
@@ -77,7 +78,8 @@ Depends on: none
 Scope:
 1. Change cast logic so invalid non-empty values become null and are recorded as invalid, not silently coerced to false or dropped without trace.
 2. Define explicit true and false token allowlists for bool parsing.
-3. Wire per-row invalid cast audit fields.
+3. Emit warnings for unexpected boolean tokens with row index, subject identifier, field name, and raw value.
+4. Wire per-row invalid cast audit fields.
 
 Files likely touched:
 1. app/run_2.py
@@ -125,6 +127,7 @@ Scope:
 2. Call replace_info only when delta exists.
 3. Add run summary counters for scanned, changed, unchanged, failed.
 4. If run_1_apply_legacy_cleanup is false, skip mutation and export only.
+5. Log skipped-noop session counts so operators can confirm Run 1 mostly exported rather than rewrote.
 
 Files likely touched:
 1. app/run_1.py
@@ -133,12 +136,13 @@ Acceptance criteria:
 1. Canonical unchanged sessions are not written.
 2. Legacy sessions with real delta are written.
 3. Summary metrics print at run end.
+4. Logs make it obvious when Run 1 performed zero writes.
 
 Test notes:
 1. Unit tests with mocked session objects.
 2. Integration-like test for mixed legacy/current inputs.
 
-## Ticket 6: Duplicate row pre-validation and deterministic policy
+## Ticket 6: Duplicate row warning and deterministic survivor policy
 Type: Feature
 Estimate: L
 Depends on: Ticket 1
@@ -149,21 +153,21 @@ Scope:
 - label: subject_id + session_id
 - date: subject_id + normalized_date
 - subject_only: subject_id
-3. Implement duplicate_row_policy fail default.
-4. Optional keep_last policy with explicit dropped row tracking.
-5. Emit duplicate report output when duplicates detected.
+3. Emit warnings for duplicate keys before any writes begin.
+4. Keep the last row deterministically for each duplicate key.
+5. Emit duplicate report output with survivor row index and dropped row indexes.
 
 Files likely touched:
 1. app/run_2.py
 
 Acceptance criteria:
-1. Duplicate rows in fail mode stop run before writes.
-2. Duplicate rows in keep_last mode process deterministically.
+1. Duplicate rows generate warnings before writes.
+2. Duplicate rows process deterministically with the last row surviving.
 3. Duplicate metadata captured in report.
 
 Test notes:
 1. Unit tests by session_match mode.
-2. Integration tests for fail and keep_last.
+2. Integration tests for warning output and deterministic survivor selection.
 
 ## Ticket 7: Non-imaging creation race safety
 Type: Reliability
@@ -207,16 +211,43 @@ Acceptance criteria:
 Test notes:
 1. Snapshot-style reconciliation schema test.
 
-## Ticket 9: Documentation updates for operator behavior
-Type: Docs
-Estimate: S
-Depends on: Tickets 1 to 8
+## Ticket 9: Test suite refresh for current interfaces
+Type: Reliability
+Estimate: M
+Depends on: Tickets 3, 5, 6 recommended
 
 Scope:
-1. Update operator guide with site_raw strict vs all-unknown behavior.
+1. Replace stale imports and patch targets in tests that still reference removed module names or deleted helpers.
+2. Replace missing fixture dependencies with local mocks or lightweight fixtures in conftest.
+3. Add focused tests for invalid boolean warnings, Run 1 delta-gated writes, and duplicate-row warning behavior.
+4. Ensure parser and main tests do not require external Flywheel state.
+
+Files likely touched:
+1. tests/test_run_1.py
+2. tests/test_main.py
+3. tests/test_parser.py
+4. tests/conftest.py
+5. tests/test_run_2.py
+
+Acceptance criteria:
+1. Focused parser/main/run_1/run_2 tests pass locally.
+2. No tests patch deleted module paths.
+3. CI failures correspond to real regressions in current code paths.
+
+Test notes:
+1. Run the focused unit suite locally.
+2. Confirm stale tests are either rewritten or removed.
+
+## Ticket 10: Documentation updates for operator behavior
+Type: Docs
+Estimate: S
+Depends on: Tickets 1 to 9
+
+Scope:
+1. Update operator guide with actual site_raw behavior and the role of site_raw_pattern in reporting.
 2. Update Run 1 behavior to explain delta-gated mutation.
 3. Document invalid value handling and warnings.
-4. Document duplicate policy and recommended preprocessing.
+4. Document duplicate warning policy and recommended preprocessing.
 5. Update release notes.
 
 Files likely touched:
@@ -237,7 +268,8 @@ Test notes:
 3. Ticket 1 -> Ticket 6
 4. Ticket 2, Ticket 3, Ticket 4, Ticket 6 -> Ticket 8
 5. Ticket 6 -> Ticket 7
-6. Tickets 1 to 8 -> Ticket 9
+6. Tickets 3, 5, 6 -> Ticket 9
+7. Tickets 1 to 9 -> Ticket 10
 
 ## Suggested sprint split
 Sprint A:
@@ -252,13 +284,15 @@ Sprint B:
 3. Ticket 7
 4. Ticket 8
 5. Ticket 9
+6. Ticket 10
 
 ## QA execution checklist
 1. Run unit tests focused on run_2 policy behavior and cast logic.
 2. Run integration fixture tests with Pakistan and PRISMA configs.
 3. Validate reconciliation CSV schema and row values for new fields.
 4. Validate no-op Run 1 behavior on canonical project snapshot.
-5. Validate duplicate fail-fast prevents any write operations.
+5. Validate duplicate warning output and survivor selection.
+6. Confirm parser/main test fixtures reflect current module paths.
 
 ## Delivery definition
 All tickets are complete when:

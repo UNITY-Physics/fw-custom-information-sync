@@ -349,8 +349,10 @@ def apply_site_config(df, site_config):
     # Copy (not rename) so the original id_field column is still available for variable_map
     # entries that also need to read from it (e.g. StudyID and UniqueStudyID both from study_id).
     id_field = site_config.get('id_field')
+    id_field_copied = False
     if id_field and id_field in df.columns and 'subject_id' not in df.columns:
         df['subject_id'] = df[id_field]
+        id_field_copied = True
 
     # 3. variable_map: canonical_field -> site_column
     # Uses copy semantics with deferred source-column drop so that the same source column
@@ -373,8 +375,9 @@ def apply_site_config(df, site_config):
             df[canonical] = source  # scalar constant — prefer constant_map for new configs
     # Drop source columns that were mapped away (deferred to allow same-source multi-target).
     df = df.drop(columns=[c for c in mapped_sources if c in df.columns], errors='ignore')
-    # Ensure id_field column is removed if it was not consumed by variable_map.
-    if id_field and id_field in df.columns and id_field != 'subject_id':
+    # Only drop id_field if we copied it to subject_id — leave it alone when subject_id
+    # was already present (the copy was skipped and id_field may still be needed downstream).
+    if id_field_copied and id_field in df.columns and id_field != 'subject_id':
         df = df.drop(columns=[id_field], errors='ignore')
 
     # 3b. constant_map: canonical_field -> scalar  (same value for every row)

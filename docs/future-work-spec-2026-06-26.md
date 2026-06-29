@@ -8,11 +8,12 @@ Status: Approved implementation spec
 This spec defines the next implementation changes for Run 1 and Run 2 behavior based on review findings and product decisions.
 
 Goals:
-1. Make site_raw behavior explicit and policy-driven.
+1. Make site_raw behavior explicit and operator-visible.
 2. Minimize unintended mutation in Run 1 for already-current sessions.
 3. Treat invalid typed values as invalid (null) with warnings and audit traceability.
 4. Keep permissive date parsing for now, while making fallback usage visible in logs and outputs.
-5. Make duplicate row handling deterministic and safe under concurrency.
+5. Make duplicate row handling visible, reviewable, and safe under concurrency.
+6. Restore test coverage so CI reflects the current public interfaces.
 
 Out of scope:
 1. Major schema redesign.
@@ -32,30 +33,25 @@ Out of scope:
 
 ### FR-1: site_raw routing policy
 Decision implemented exactly as approved:
-1. If site config contains site_raw_pattern, regex mode is strict by default.
-2. Add gear-level config flag to allow all unknown fields when explicitly enabled.
+1. Existing flag store_site_raw remains the operator opt-in for copying unknown fields into session info under site_raw.*.
+2. site_raw_pattern remains useful for identifying expected raw field families and for reconciliation/report grouping, but it is not a write allowlist.
 
 Required config behavior:
 1. Existing flag store_site_raw remains master gate.
 - false: no unknown fields written to site_raw.
-- true: unknown fields may be written, subject to below policy.
-2. New flag: store_all_unknown_site_raw (default false).
-3. Policy matrix:
-- store_site_raw=false: write none.
-- store_site_raw=true and regex present and store_all_unknown_site_raw=false: write only regex-matched unknown fields.
-- store_site_raw=true and regex present and store_all_unknown_site_raw=true: write all unknown fields (regex subset plus others).
-- store_site_raw=true and regex absent and store_all_unknown_site_raw=false: write none (strict behavior since no allowlist).
-- store_site_raw=true and regex absent and store_all_unknown_site_raw=true: write all unknown fields.
+- true: all unknown fields are written to site_raw.
+2. site_raw_pattern is used for audit/report classification only.
+3. Reconciliation should distinguish regex-matched site_raw fields from other unknown fields so operators can confirm what was expected versus opportunistic preservation.
 
 Audit/report additions per row:
 1. unknown_seen
 2. unknown_written
-3. unknown_skipped_by_regex
-4. unknown_skipped_by_policy
+3. unknown_regex_matched
+4. unknown_non_regex_written
 
 Logging:
-1. Log resolved site_raw policy at run start.
-2. Log count summary at run end.
+1. Log resolved site_raw policy at run start, including whether unknowns will be preserved.
+2. Log count summary at run end, including regex-matched vs non-regex unknown counts when a pattern is configured.
 
 ### FR-2: Run 1 mutation behavior
 Product intent:
@@ -131,16 +127,25 @@ Decision:
 Required pre-validation phase:
 1. Compute matching key based on selected session_match mode.
 2. Detect duplicates.
-3. Default behavior: fail fast with duplicate report output and non-zero exit.
-
-Optional mode:
-1. duplicate_row_policy with values fail|keep_last.
-2. Default fail.
-3. keep_last must emit warnings and include dropped row indexes in report.
+3. Default behavior: emit warnings, produce a duplicate report output, and continue only with a deterministic policy.
+4. Default deterministic policy: keep the last row encountered for a duplicate key.
+5. Dropped row indexes and chosen survivor row index must be recorded in the duplicate report and run logs.
 
 Thread safety requirements:
 1. Do not allow concurrent creation of same non-imaging target.
 2. Ensure per-key serialization for non-imaging create/update path.
+
+### FR-6: Test-suite refresh for current interfaces
+Decision:
+1. The test suite must be brought back in line with the current module names, fixtures, and public APIs before using CI as a release gate.
+
+Required work:
+1. Replace stale imports and patch targets that reference removed module paths or deleted helper functions.
+2. Add lightweight mock-based tests for run_1 delta-gated writes and run_2 warning behavior.
+3. Ensure parser and main tests run without external Flywheel state or deprecated fixtures.
+
+Acceptance intent:
+1. Focused unit tests for parser, main, run_1, and run_2 should pass in local development and CI.
 
 ## 4. Non-functional requirements
 1. Backward compatibility:
@@ -153,44 +158,37 @@ Thread safety requirements:
 - Pre-validation and audit enhancements should not materially degrade runtime for typical project sizes.
 
 ## 5. Config changes
-Add to manifest.json:
-1. store_all_unknown_site_raw (boolean, default false)
-Description: When store_site_raw is enabled, also write all unknown CSV fields to site_raw even if not matched by site_raw_pattern.
-
 Optional additions:
-1. duplicate_row_policy (string enum: fail|keep_last, default fail)
-2. run_1_apply_legacy_cleanup (boolean, default true)
+1. run_1_apply_legacy_cleanup (boolean, default true)
 
 Update docs/site_config_README.md and release notes to reflect:
-1. strict regex routing behavior
-2. optional all-unknown override
+1. store_site_raw preserves all unknown fields when enabled
+2. site_raw_pattern is for expected raw-field families and reporting, not write restriction
 3. run_1 non-mutation expectation for current sessions
 4. invalid value handling
-5. duplicate policy
+5. duplicate warning policy and deterministic survivor selection
 
 ## 6. Reconciliation report schema updates
 Add columns:
 1. unknown_seen
 2. unknown_written
-3. unknown_skipped_by_regex
-4. unknown_skipped_by_policy
+3. unknown_regex_matched
+4. unknown_non_regex_written
 5. invalid_cast_fields
 6. invalid_cast_count
 7. date_parse_mode
 8. date_parse_format_used
 9. duplicate_key
 10. duplicate_action
+11. duplicate_survivor_row
+12. duplicate_dropped_rows
 
 ## 7. Acceptance criteria
 
-AC-1 site_raw strict behavior:
-1. Given store_site_raw=true, regex present, store_all_unknown_site_raw=false
-2. Then only regex-matched unknown fields are written to site_raw
-3. And non-matching unknown fields appear in unknown_skipped_by_regex
-
-AC-2 site_raw all-unknown override:
-1. Given store_site_raw=true and store_all_unknown_site_raw=true
-2. Then all unknown fields are written regardless of regex
+AC-1 site_raw reporting behavior:
+1. Given store_site_raw=true and regex present
+2. Then all unknown fields are written to site_raw
+3. And reconciliation distinguishes regex-matched unknown fields from other preserved unknown fields
 
 AC-3 Run 1 no-op on current sessions:
 1. Given a session with no legacy keys and no cleanup delta
@@ -205,24 +203,26 @@ AC-5 date fallback traceability:
 1. Given configured format does not parse but fallback does
 2. Then row reports date_parse_mode=fallback and date_parse_format_used populated
 
-AC-6 duplicate key fail-fast:
-1. Given duplicate matching keys in CSV and duplicate_row_policy=fail
-2. Then run exits non-zero before threaded writes
-3. And duplicate report is produced
+AC-6 duplicate key warning handling:
+1. Given duplicate matching keys in CSV
+2. Then the run emits warnings before threaded writes
+3. And a duplicate report identifies the kept row and dropped rows
 
 ## 8. Test plan (minimum)
 
 Unit tests:
-1. site_raw policy matrix cases.
+1. site_raw reporting cases with and without site_raw_pattern.
 2. bool invalid token behavior (invalid != false).
 3. date parse mode/format reporting.
 4. duplicate key detector by each session_match mode.
+5. run_1 delta-gated no-op behavior.
 
 Integration tests:
 1. Run 2 with mixed unknown columns and regex.
 2. Run 2 with fallback date parsing and reconciliation assertions.
 3. Run 1 with unchanged canonical sessions verifies no writes.
 4. Non-imaging duplicate-create race protection.
+5. Main/parser tests with current fixture wiring.
 
 Regression tests:
 1. Existing v1 fallback path (no site config).
@@ -233,17 +233,19 @@ Regression tests:
 Mitigation: explicit manifest/docs wording and startup policy log.
 2. Risk: stricter invalid parsing increases null rates.
 Mitigation: reconciliation visibility and site feedback loop.
-3. Risk: duplicate fail-fast blocks previously "working" files.
-Mitigation: optional keep_last mode and pre-run guidance.
+3. Risk: duplicate warning mode may hide upstream data quality problems if logs are ignored.
+Mitigation: duplicate report output plus explicit warning summary at end of run.
+4. Risk: stale tests create false confidence or false failures.
+Mitigation: refresh test fixtures and make focused unit tests part of release gating.
 
 ## 10. Developer implementation checklist
-1. Implement policy gate in run_2 write path for site_raw.
-2. Add new manifest config(s).
-3. Add Run 1 delta-check before replace_info.
-4. Update parse/cast logic to classify invalid typed values.
-5. Extend reconciliation report schema + writing logic.
-6. Add duplicate pre-validation phase before ThreadPoolExecutor.
-7. Add tests and update docs/release notes.
+1. Add run-level logging and reconciliation fields for site_raw reporting.
+2. Add Run 1 delta-check before replace_info.
+3. Update parse/cast logic to classify invalid typed values.
+4. Extend reconciliation report schema + writing logic.
+5. Add duplicate pre-validation phase before ThreadPoolExecutor with warning-first survivor selection.
+6. Refresh stale parser/main/run_1 tests and add targeted new coverage.
+7. Update docs/release notes.
 
 ## 11. Handoff notes
 1. This spec reflects approved product decisions captured on 2026-06-26.
