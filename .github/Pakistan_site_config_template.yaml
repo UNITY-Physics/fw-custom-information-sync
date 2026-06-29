@@ -87,6 +87,11 @@ unit_map:
     target_unit: "inches"
     conversion: "multiply_by_0.393701"
 
+# --- Null sentinel ---
+# Put this string in any CSV cell to explicitly clear a stale Flywheel value.
+# Empty cells are skipped (leave existing value); only this sentinel actively wipes it.
+null_sentinel: null   # e.g. set to "NULL" and put NULL in cells you want cleared
+
 # --- Column filtering ---
 
 # Internal IDs not needed in Flywheel custom info.

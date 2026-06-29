@@ -25,6 +25,7 @@ from app.run_2 import (
     _find_non_imaging_session_by_label,
     _id_to_str,
 )
+import math
 
 # ---------------------------------------------------------------------------
 # Fixture data
@@ -527,3 +528,79 @@ class TestNonImagingHelpers:
             sessions, "NI", "", date(2026, 4, 1)
         )
         assert found is None
+
+
+# ---------------------------------------------------------------------------
+# null_sentinel — cast_metadata_fields preserves sentinel through type casting
+# ---------------------------------------------------------------------------
+
+class TestNullSentinel:
+
+    def test_sentinel_preserved_through_float_cast(self):
+        """Sentinel in a float field must survive type casting as the sentinel string."""
+        df = pd.DataFrame({"childGestation_weeks": ["NULL", "34.0"], "subject_id": ["a", "b"]})
+        template = {"childGestation_weeks": 0.0}
+        result = cast_metadata_fields(df.copy(), template, null_sentinel="NULL")
+        assert result["childGestation_weeks"].iloc[0] == "NULL"
+        assert result["childGestation_weeks"].iloc[1] == pytest.approx(34.0)
+
+    def test_sentinel_preserved_through_bool_cast(self):
+        """Sentinel in a bool field must not be coerced to False."""
+        df = pd.DataFrame({"mriCollectedAtTimepoint": ["NULL", "true"], "subject_id": ["a", "b"]})
+        template = {}
+        field_types = {"mriCollectedAtTimepoint": "bool"}
+        result = cast_metadata_fields(df.copy(), template, field_types=field_types, null_sentinel="NULL")
+        assert result["mriCollectedAtTimepoint"].iloc[0] == "NULL"
+        assert result["mriCollectedAtTimepoint"].iloc[1] is True
+
+    def test_sentinel_preserved_for_str_field(self):
+        """Sentinel in a str field survives (str cast of 'NULL' is 'NULL', but must match)."""
+        df = pd.DataFrame({"childBiologicalSex": ["NULL", "Male"], "subject_id": ["a", "b"]})
+        template = {"childBiologicalSex": None}
+        result = cast_metadata_fields(df.copy(), template, null_sentinel="NULL")
+        assert result["childBiologicalSex"].iloc[0] == "NULL"
+        assert result["childBiologicalSex"].iloc[1] == "Male"
+
+    def test_nan_not_confused_with_sentinel(self):
+        """Genuine NaN must still become missing (None/NaN), not be treated as the sentinel."""
+        df = pd.DataFrame({"childGestation_weeks": [float("nan"), "NULL"], "subject_id": ["a", "b"]})
+        template = {"childGestation_weeks": 0.0}
+        result = cast_metadata_fields(df.copy(), template, null_sentinel="NULL")
+        assert pd.isna(result["childGestation_weeks"].iloc[0])
+        assert result["childGestation_weeks"].iloc[1] == "NULL"
+
+    def test_no_sentinel_config_preserves_existing_behaviour(self):
+        """Without null_sentinel, 'NULL' string in a float field becomes None (unchanged)."""
+        df = pd.DataFrame({"childGestation_weeks": ["NULL"], "subject_id": ["a"]})
+        template = {"childGestation_weeks": 0.0}
+        result = cast_metadata_fields(df.copy(), template)  # no null_sentinel
+        assert result["childGestation_weeks"].iloc[0] is None
+
+    def test_sentinel_preserved_through_unit_map_conversion(self):
+        """Sentinel must survive multiply_by unit conversion in apply_site_config."""
+        df = pd.DataFrame({
+            "length_cm": ["NULL", "50.0"],
+            "subject_id": ["a", "b"],
+        })
+        config = {
+            "variable_map": {"childBirthLength_inches": "length_cm"},
+            "unit_map": {
+                "childBirthLength_inches": {
+                    "source_unit": "cm",
+                    "target_unit": "inches",
+                    "conversion": "multiply_by_0.393701",
+                }
+            },
+            "null_sentinel": "NULL",
+        }
+        result, _ = apply_site_config(df.copy(), config)
+        assert result["childBirthLength_inches"].iloc[0] == "NULL"
+        assert abs(float(result["childBirthLength_inches"].iloc[1]) - 19.685) < 0.01
+
+    def test_sentinel_unknown_column_preserved(self):
+        """Sentinel in a column not in the template must also be preserved."""
+        df = pd.DataFrame({"some_unknown_col": ["NULL", "foo"], "subject_id": ["a", "b"]})
+        template = {}
+        result = cast_metadata_fields(df.copy(), template, null_sentinel="NULL")
+        assert result["some_unknown_col"].iloc[0] == "NULL"
+        assert result["some_unknown_col"].iloc[1] == "foo"

@@ -246,6 +246,17 @@ value_map:
 # IMPORTANT: use block style (indented lines), NOT flow style ({...}).
 unit_map:
 
+# --- Null sentinel ---
+
+# A sentinel string that, when placed in a CSV cell, explicitly clears the
+# pre-existing value for that canonical field in Flywheel (sets it to null).
+# Empty / blank cells are always skipped (they leave existing values untouched).
+# Only cells containing exactly this string act as an explicit clear.
+#
+# Example: set null_sentinel to "NULL" and put NULL in any cell where you want
+# to wipe a stale value.  Leave null here to disable the feature.
+null_sentinel: null
+
 # --- Column filtering ---
 
 # Columns to drop entirely before any processing (site-internal IDs,

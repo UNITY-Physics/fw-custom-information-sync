@@ -289,9 +289,18 @@ def _id_to_str(x):
     return s
 
 
-def cast_metadata_fields(df, template, field_types=None):
+def cast_metadata_fields(df, template, field_types=None, null_sentinel=None):
     identifier_columns = {'group_id', 'project_id', 'subject_id', 'session_id'}
     _type_map = {'float': float, 'bool': bool, 'str': str, 'list': list, 'int': int}
+
+    def _is_sentinel(val):
+        return (
+            null_sentinel is not None
+            and val is not None
+            and not (isinstance(val, float) and pd.isna(val))
+            and str(val).strip() == null_sentinel
+        )
+
     for col in df.columns:
         if col in identifier_columns:
             df[col] = df[col].apply(_id_to_str)
@@ -300,7 +309,9 @@ def cast_metadata_fields(df, template, field_types=None):
             # Explicit type declaration takes priority over default-value inference.
             # Required for fields whose default is None but type is not str (e.g. z-scores).
             target_type = _type_map.get(field_types[col], str)
-            df[col] = df[col].apply(lambda x: parse_value(x, target_type))
+            df[col] = df[col].apply(
+                lambda x: null_sentinel if _is_sentinel(x) else parse_value(x, target_type)
+            )
         elif col in template:
             example = template[col]
             if isinstance(example, bool):
@@ -315,10 +326,14 @@ def cast_metadata_fields(df, template, field_types=None):
                 target_type = str
             else:
                 continue
-            df[col] = df[col].apply(lambda x: parse_value(x, target_type))
+            df[col] = df[col].apply(
+                lambda x: null_sentinel if _is_sentinel(x) else parse_value(x, target_type)
+            )
         else:
             # Unknown column: use smart fallback
-            df[col] = df[col].apply(smart_fallback_parser)
+            df[col] = df[col].apply(
+                lambda x: null_sentinel if _is_sentinel(x) else smart_fallback_parser(x)
+            )
 
     return df
 
@@ -410,6 +425,7 @@ def apply_site_config(df, site_config):
 
     # 5. unit_map: numeric unit conversion before type casting
     unit_map = site_config.get('unit_map') or {}
+    _null_sentinel = site_config.get('null_sentinel')
     for field, conv in unit_map.items():
         if field not in df.columns:
             log.warning(
@@ -421,7 +437,17 @@ def apply_site_config(df, site_config):
         conversion = conv.get('conversion', '')
         if conversion.startswith('multiply_by_'):
             factor = float(conversion.replace('multiply_by_', ''))
-            df[field] = pd.to_numeric(df[field], errors='coerce') * factor
+            if _null_sentinel:
+                # Preserve sentinel strings through numeric conversion.
+                # Upcast to object before re-assigning the string sentinel because
+                # pd.to_numeric produces a float64 column, which rejects strings in pandas 2.x.
+                sentinel_mask = df[field].astype(str).str.strip() == _null_sentinel
+                df[field] = pd.to_numeric(df[field], errors='coerce') * factor
+                if sentinel_mask.any():
+                    df[field] = df[field].astype(object)
+                    df.loc[sentinel_mask, field] = _null_sentinel
+            else:
+                df[field] = pd.to_numeric(df[field], errors='coerce') * factor
 
     # 6. Identify site_raw columns via regex pattern (routed to site_raw namespace)
     # Accept both 'site_raw_pattern' and legacy 'gsed_item_pattern' key names
@@ -526,6 +552,12 @@ def run_second_stage_with_inputs(
     site_raw_cols = site_raw_cols - canonical_fields
     site_raw_prefix = (site_config or {}).get('site_raw_prefix', 'site_raw')
 
+    # Null sentinel: a CSV cell value that explicitly clears a pre-existing Flywheel field.
+    # Empty/NaN cells are skipped (leave existing value); only the sentinel actively wipes it.
+    null_sentinel = (site_config or {}).get('null_sentinel') or None
+    if null_sentinel:
+        null_sentinel = str(null_sentinel).strip()
+
     # Session matching mode from site config
     session_match_mode = (site_config or {}).get('session_match', 'label')
     session_date_field = (site_config or {}).get('session_date_field')
@@ -584,7 +616,7 @@ def run_second_stage_with_inputs(
         print(f"Missing required column(s): {', '.join(sorted(missing))}. Exiting.")
         sys.exit(1)
 
-    csv_data = cast_metadata_fields(csv_data, metadata_template, field_types=field_types)
+    csv_data = cast_metadata_fields(csv_data, metadata_template, field_types=field_types, null_sentinel=null_sentinel)
 
     # Determine which canonical fields are absent from the CSV entirely (same for all rows)
     canonical_not_in_csv = sorted(canonical_fields - set(csv_data.columns))
@@ -638,6 +670,12 @@ def run_second_stage_with_inputs(
                 if key in identifier_cols:
                     continue
                 if is_non_imaging and not non_imaging_field_allowed(key):
+                    continue
+                # Explicit clear: sentinel string in cell sets this canonical field to None
+                if null_sentinel is not None and value == null_sentinel:
+                    if key in canonical_fields:
+                        ses_dict[key] = None
+                        audit['fields_cleared'].append(key)
                     continue
                 if value is None or (isinstance(value, float) and pd.isna(value)) or str(value).strip() == '':
                     continue
@@ -700,6 +738,7 @@ def run_second_stage_with_inputs(
             'nearest_imaging_day_delta': '',
             'dry_run_applied': bool(dry_run),
             'fields_written': [],
+            'fields_cleared': [],
             'canonical_empty': [],
             'pre_existing': [],
             'site_raw_written': [],
@@ -981,7 +1020,7 @@ def run_second_stage_with_inputs(
         'candidate_type', 'matched_session_label', 'matched_session_kind',
         'created_session_label', 'created_session_kind', 'source_row_uid',
         'nearest_imaging_session_label', 'nearest_imaging_day_delta', 'dry_run_applied',
-        'fields_written_count', 'fields_written', 'canonical_empty',
+        'fields_written_count', 'fields_written', 'fields_cleared', 'canonical_empty',
         'pre_existing', 'site_raw_written', 'unknown_skipped',
     ]
     with open(audit_path, 'w', newline='') as f:
@@ -1010,6 +1049,7 @@ def run_second_stage_with_inputs(
                 'dry_run_applied':    r.get('dry_run_applied', False),
                 'fields_written_count': r.get('fields_written_count', 0),
                 'fields_written':     '; '.join(r['fields_written']),
+                'fields_cleared':     '; '.join(r.get('fields_cleared', [])),
                 'canonical_empty':    '; '.join(r['canonical_empty']),
                 'pre_existing':       '; '.join(r['pre_existing']),
                 'site_raw_written':   '; '.join(r['site_raw_written']),
